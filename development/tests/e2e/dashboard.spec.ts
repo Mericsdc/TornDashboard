@@ -20,10 +20,10 @@ test('preview recovers after SPA replacement and falls back below content on nar
   await page.reload(); await expect(host.locator('.dashboard')).toHaveAttribute('data-theme', 'slate');
 });
 
-test('updating the installed folder retains extension identity, BOSBOT pairing and user preferences', async ({ browserName }, testInfo) => {
+test('updating the installed folder retains extension identity, BOSBOT pairing and user preferences', async ({ browserName }) => {
   expect(browserName).toBe('chromium');
   const extensionPath = resolve('..');
-  const profile = testInfo.outputPath('update-profile');
+  const profile = await mkdtemp(join(tmpdir(), 'torndashboard-update-profile-'));
   const launch = () => chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true, args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`] });
   const staging = await mkdtemp(join(tmpdir(), 'torndashboard-update-e2e-'));
   const scriptUrl = new URL('../../scripts/extension-runtime.mjs', import.meta.url).href;
@@ -38,13 +38,14 @@ test('updating the installed folder retains extension identity, BOSBOT pairing a
     await worker.evaluate(async data => { await chrome.storage.local.set(data); }, { state, bosbotDevice, bosbotOnlyV3: true });
     await context.close();
     for (const [name, contents] of original.files) await writeFile(join(staging, name), contents);
-    const updatedManifest = { ...original.manifest, version: '0.3.2' };
+    const parts = original.manifest.version.split('.').map(Number);
+    const updatedManifest = { ...original.manifest, version: `${parts[0]}.${parts[1]}.${parts[2] + 1}` };
     await writeFile(join(staging, 'manifest.json'), JSON.stringify(updatedManifest));
     await promoteExtension(staging, extensionPath);
     context = await launch(); worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
     expect(new URL(worker.url()).hostname).toBe(id);
     expect(await worker.evaluate(() => chrome.runtime.getManifest().name)).toBe('TornDashboard');
-    expect(await worker.evaluate(() => chrome.runtime.getManifest().version)).toBe('0.3.2');
+    expect(await worker.evaluate(() => chrome.runtime.getManifest().version)).toBe(updatedManifest.version);
     const retained = await worker.evaluate(async () => chrome.storage.local.get<{ state: PublicState; bosbotDevice: unknown }>(['state', 'bosbotDevice']));
     expect(retained.bosbotDevice).toEqual(bosbotDevice);
     expect(retained.state.settings.theme).toBe('slate'); expect(retained.state.settings.gap).toBe(14);
@@ -52,13 +53,15 @@ test('updating the installed folder retains extension identity, BOSBOT pairing a
     await context.close();
     for (const [name, contents] of original.files) await writeFile(join(staging, name), contents);
     await promoteExtension(staging, extensionPath); await rm(staging, { recursive: true, force: true });
+    await rm(profile, { recursive: true, force: true });
   }
 });
 
-test('legacy state migrates to BOSBOT only while preserving drag positions and blocking private storage', async ({ browserName }, testInfo) => {
+test('legacy state migrates to BOSBOT only while preserving drag positions and blocking private storage', async ({ browserName }) => {
   expect(browserName).toBe('chromium');
   const extensionPath = resolve('..');
-  const context = await chromium.launchPersistentContext(testInfo.outputPath('legacy-profile'), { channel: 'chromium', headless: true, viewport: { width: 1920, height: 1080 }, args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`] });
+  const profile = await mkdtemp(join(tmpdir(), 'torndashboard-legacy-profile-'));
+  const context = await chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true, viewport: { width: 1920, height: 1080 }, args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`] });
   try {
     const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).hostname;
     const legacy = defaultState(); legacy.settings.dataSource = 'mock'; legacy.settings.autoSwitching = false; legacy.settings.theme = 'torn-dark';
@@ -70,6 +73,7 @@ test('legacy state migrates to BOSBOT only while preserving drag positions and b
     const options = await context.newPage(); await options.goto(`chrome-extension://${id}/options.html`); await expect(options.locator('#status')).toHaveText('Ready');
     await expect(options.locator('[name="dataSource"]')).toHaveCount(0); await expect(options.locator('[name="tornKey"]')).toHaveCount(0);
     await host.getByLabel('Dashboard preset').selectOption('WAR');
+    await expect(host.getByLabel('Dashboard preset')).toHaveValue('WAR');
     const left = host.locator('.widget-list[data-side="left"]'), right = host.locator('.widget-list[data-side="right"]');
     const handle = await left.getByLabel('Drag Recommended Targets', { exact: true }).boundingBox(), destination = await right.boundingBox();
     await page.mouse.move(handle!.x + handle!.width/2, handle!.y + handle!.height/2); await page.mouse.down();
@@ -85,10 +89,10 @@ test('legacy state migrates to BOSBOT only while preserving drag positions and b
     await cdp.send('Runtime.enable'); await expect.poll(() => isolated).toBeGreaterThan(0);
     const denied = await cdp.send('Runtime.evaluate', { contextId: isolated, expression: `chrome.runtime.sendMessage({type:'BOSBOT_CONNECT'})`, awaitPromise: true, returnByValue: true }); expect(denied.result.value).toMatchObject({ ok: false });
     const inaccessible = await cdp.send('Runtime.evaluate', { contextId: isolated, expression: `(async()=>{try{await chrome.storage.local.get('bosbotDevice');return false}catch{return true}})()`, awaitPromise: true, returnByValue: true }); expect(inaccessible.result.value).toBe(true);
-  } finally { await context.close(); }
+  } finally { await context.close(); await rm(profile, { recursive: true, force: true }); }
 });
 
-test('BOSBOT pairing, live widgets, restart persistence and revocation keep device credentials private', async ({ browserName }, testInfo) => {
+test('BOSBOT pairing, live widgets, restart persistence and revocation keep device credentials private', async ({ browserName }) => {
   test.setTimeout(90000);
   expect(browserName).toBe('chromium');
   const { default: Fastify } = await import('fastify');
@@ -120,7 +124,7 @@ test('BOSBOT pairing, live widgets, restart persistence and revocation keep devi
   });
   server.delete('/api/extension/device', async () => { revoked = true; return { revoked: true }; });
   await server.listen({ host: '127.0.0.1', port: 4318 });
-  const extensionPath = resolve('..'); const profile = testInfo.outputPath('bosbot-profile');
+  const extensionPath = resolve('..'); const profile = await mkdtemp(join(tmpdir(), 'torndashboard-bosbot-profile-'));
   const launch = () => chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true, viewport: { width: 1920, height: 1080 }, args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`] });
   let context = await launch();
   const fixture = (await readFile('packages/extension/demo/index.html', 'utf8')).replace('<script type="module" src="demo.js"></script>', '');
@@ -171,6 +175,8 @@ test('BOSBOT pairing, live widgets, restart persistence and revocation keep devi
     await expect(market.locator('.market-product')).toHaveCount(2);
     await market.getByLabel('In stock only', { exact: true }).check(); await expect(market.locator('.market-product')).toHaveCount(1);
     await market.getByLabel('In stock only', { exact: true }).uncheck(); await market.getByLabel('Search products').fill('monkey'); await expect(market.locator('.market-product')).toHaveCount(1); await expect(market.locator('.market-product')).toContainText('Monkey Plushie');
+    await expect(market.getByLabel('Search products')).toBeFocused();
+    await expect(market.getByLabel('Search products')).toHaveValue('monkey');
     await market.getByLabel('Search products').fill(''); await market.getByLabel('Watch Cherry Blossom in Japan', { exact: true }).click();
     const calculator = host.locator('[data-widget-id="travel-profit"]'); await expect(calculator).toHaveCount(1);
     await calculator.getByLabel('Quantity', { exact: true }).fill('10'); await expect(calculator).toContainText('$195,000');
@@ -202,5 +208,5 @@ test('BOSBOT pairing, live widgets, restart persistence and revocation keep devi
     await expect(reopenedOptions.locator('#bosbot-status')).toContainText('No BOSBOT account connected');
     await reopened.reload(); await expect(reopened.locator('#tcd-dashboard .source-badge')).toHaveText('NO DATA');
     expect(revoked).toBe(true);
-  } finally { await context.close(); await server.close(); }
+  } finally { await context.close(); await server.close(); await rm(profile, { recursive: true, force: true }); }
 });

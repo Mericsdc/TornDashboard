@@ -11,6 +11,7 @@ export class WidgetManager {
     for (const [id, instance] of this.mounted) if (!wanted.has(id)) { instance.widget.destroy(); instance.card.remove(); this.mounted.delete(id); }
     for (const side of ['left', 'right'] as const) {
       const list = this.panels[side];
+      let cursor = list.firstElementChild;
       for (const id of layout[side]) {
         if (!wanted.has(id)) continue;
         const definition = this.registry.get(id); if (!definition) continue;
@@ -27,7 +28,10 @@ export class WidgetManager {
           const body = el('div', 'widget-body'); card.append(header, body);
           const widget = definition.create(); widget.mount(body, context); instance = { card, widget }; this.mounted.set(id, instance);
         }
-        list.append(instance.card); instance.widget.update(context.snapshot, context);
+        // Moving an already correctly positioned card detaches its focused inputs in Chrome.
+        if (instance.card !== cursor) list.insertBefore(instance.card, cursor);
+        cursor = instance.card.nextElementSibling;
+        instance.widget.update(context.snapshot, context);
       }
     }
   }

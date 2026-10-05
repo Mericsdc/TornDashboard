@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TornDashboard",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Draggable war and travel widgets powered by your BOSBOT account.",
   "minimum_chrome_version": "120",
   "permissions": [

@@ -33,15 +33,15 @@ Her seferinde **`development/dist/TornDashboard.zip`** ve `SHA256SUMS` yenilenir
 Yeni sürüm hazırlamak için:
 
 ```sh
-npm run version:set -- 0.3.2
+npm run version:set -- 0.3.3
 npm run update
 npm run test:e2e
 npm run package
 git add .
-git commit -m "Release TornDashboard 0.3.2"
+git commit -m "Release TornDashboard 0.3.3"
 git push
-git tag v0.3.2
-git push origin v0.3.2
+git tag v0.3.3
+git push origin v0.3.3
 ```
 
 Sürüm komutu tüm paket/manifest sürümlerini birlikte artırır. GitHub Actions kodu kontrol eder, gerçek Chromium testlerini çalıştırır ve `v*` etiketi için **TornDashboard.zip** adlı release dosyasını oluşturur. Chrome Web Store’a yayın için geliştirici hesabında aynı mağaza kaydı kullanılmalıdır. Mağaza kimliği mevcut unpacked kimliğinden farklı olabilir; ilk mağaza geçişinde yeniden BOSBOT eşlemesi gerekebilir.

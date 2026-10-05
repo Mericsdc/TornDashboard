@@ -1,4 +1,4 @@
-# TornDashboard 0.3.1
+# TornDashboard 0.3.2
 
 Vanilla TypeScript/CSS Manifest V3 Chrome extension. **Tüm canlı widgetlar yalnızca BOSBOT hesabından veri alır.** API anahtarları sunucuda kalır; eksik veya eski veri `Unknown` olur. Liquid Glass kartları responsive Torn içerik sınırına yerleşir. Sürükleme, sol/sağ paneller arası taşıma ve her preset için kalıcı düzen vardır.
 

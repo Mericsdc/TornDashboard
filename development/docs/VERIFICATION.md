@@ -1,4 +1,4 @@
-# Verification — TornDashboard 0.3.1 / BOSBOT 0.24.6
+# Verification — TornDashboard 0.3.2 / BOSBOT 0.24.6
 
 Verified 2026-10-05:
 
