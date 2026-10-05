@@ -1,0 +1,4 @@
+# Unified patch context includes intentional single-space lines.
+*.patch whitespace=-blank-at-eol
+*.png binary
+*.wav binary
