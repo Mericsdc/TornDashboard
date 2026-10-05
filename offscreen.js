@@ -1,0 +1,1 @@
+"use strict";(()=>{var n=new Audio(chrome.runtime.getURL("warning.wav"));chrome.runtime.onMessage.addListener((t,r,e)=>r.id!==chrome.runtime.id||typeof t!="object"||t===null||!("target"in t)||t.target!=="offscreen"||!("type"in t)||t.type!=="PLAY_WARNING"?!1:(n.pause(),n.currentTime=0,n.play().then(()=>e({ok:!0})).catch(()=>e({ok:!1})),!0));})();

@@ -1,0 +1,356 @@
+--- a/core/changelog.py
++++ b/core/changelog.py
+@@ -2,6 +2,10 @@
+ #  CHANGELOG — versioned release notes
+ # ═══════════════════════════════════════════
+ CHANGELOG: dict = {
++    "0.24.6 Beta": {
++        "en": ["Torn Companion receives all travel products with Cost, Torn market value and observation times.", "Flight country and arrival use the verified BOSBOT account's private Torn travel API, with a shared faction-status fallback.", "Company directors can view employee addiction effectiveness penalties. Chain observations refresh every 10 seconds; keys remain server-side."],
++        "tr": ["Torn Companion tüm seyahat ürünlerini Cost, Torn değeri ve gözlem zamanlarıyla alır.", "Ülke ve varış, BOSBOT hesabının doğrulanmış kişisel seyahat verisinden algılanır.", "Şirket direktörlerine çalışanların addiction verimlilik cezası gösterilir; chain önbelleği 10 saniyede yenilenir."],
++    },
+     "0.24.5 Beta": {
+         "en": ["Torn Companion can pair with your BOSBOT account for read-only war, targets, hospital, chain, travel and restock data.", "Connections are account-scoped, expire after 30 days and can be revoked at /extension/devices. Existing page permissions apply.", "Live widgets share BOSBOT caches. Missing strength data remains unknown; level-based stat fallbacks are excluded. Restock times are observed estimates."],
+         "tr": ["Torn Companion, salt okunur savaş, hedef, hastane, chain, seyahat ve restock verileri için BOSBOT hesabınıza bağlanır.", "Tarayıcı bağlantıları hesaba özeldir, 30 gün geçerlidir ve /extension/devices üzerinden iptal edilir. Mevcut sayfa izinleri geçerlidir.", "Eklentiler BOSBOT önbelleğini paylaşır. Güç verisi yoksa bilinmiyor gösterilir; restock saatleri gözlemden tahmindir."],
+--- a/core/config.py
++++ b/core/config.py
+@@ -41,7 +41,7 @@
+ BOSBOT_RELEASE_NOTES_ADMIN = _feature_flag("BOSBOT_RELEASE_NOTES_ADMIN")
+ BOSBOT_STOCK_MARKET = _feature_flag("BOSBOT_STOCK_MARKET")
+ 
+-CURRENT_VERSION = "0.24.5 Beta"
++CURRENT_VERSION = "0.24.6 Beta"
+ 
+ # ── Encryption ──────────────────────────────────────────
+ _ENC = "encryption.key"
+--- a/dashboard/data.py
++++ b/dashboard/data.py
+@@ -393,6 +393,7 @@
+                     "quantity": quantity,
+                     "cost": cost,
+                     "marketValue": market_value,
++                    "priceObservedAt": int(restock_monitor._mv_cache_ts) or None,
+                     **pricing,
+                     "opportunityScore": opportunity_score,
+                     "revalidateAt": now + 120,
+--- a/dashboard/extension_feed.py
++++ b/dashboard/extension_feed.py
+@@ -8,6 +8,7 @@
+ from dashboard.storage import user_torn_link
+ from dashboard.operations_storage import list_restock_favorites_v2
+ from monitors import restock
++from dashboard.extension_personal import personal_data, company_summary
+ 
+ 
+ def ms(value):
+@@ -37,6 +38,8 @@
+     at = ms(item.get("observedAt"))
+     fresh = at and -30000 <= int(time.time() * 1000) - at <= 180000
+     return {"itemId": safe_int(item["itemId"]), "name": text(item["name"]), "country": text(country, 60),
++            "cost": safe_int(item.get("cost")) or None, "tornValue": safe_int(item.get("marketValue")) or None,
++            "priceObservedAt": ms(item.get("priceObservedAt")),
+             "stock": max(0, safe_int(item.get("quantity"))) if fresh else None, "observedAt": at, "restock": estimate if fresh else {"kind": "unknown", "reason": "BOSBOT source observation is stale or unavailable"}}
+ 
+ 
+@@ -85,7 +88,7 @@
+ 
+ async def snapshot(identity, allowed):
+     result = {"source": "live", "provider": "bosbot", "generatedAt": int(time.time() * 1000), "war": None, "chain": None,
+-              "travel": None, "player": {"level": None}, "targets": [], "stocks": [], "favorites": [], "issues": {}}
++              "travel": None, "company": None, "player": {"level": None}, "targets": [], "stocks": [], "favorites": [], "issues": {}}
+ 
+     async def section(key, loader):
+         try:
+@@ -96,7 +99,7 @@
+ 
+     async def war():
+         row = await data._cached("targets:current-war-context", 60, data._current_ranked_war)
+-        result["war"] = {"active": bool(row and row.get("phase") == "active"), "opponent": text((row or {}).get("enemyName")),
++        result["war"] = {"active": bool(row and row.get("phase") == "active"), "id": safe_int((row or {}).get("id")) or None, "opponentId": safe_int((row or {}).get("enemyId")) or None, "opponent": text((row or {}).get("enemyName")),
+                          "score": (row or {}).get("score"), "enemyScore": (row or {}).get("enemyScore"), "targetScore": (row or {}).get("targetScore"),
+                          "endsAt": ms((row or {}).get("end")), "observedAt": observed("targets:current-war-context", 60)}
+ 
+@@ -106,14 +109,15 @@
+             if status != 200 or not isinstance(payload, dict) or payload.get("error") or not isinstance(payload.get("chain"), dict):
+                 raise data.PortalDataError("Chain unavailable")
+             return {"raw": payload["chain"], "at": safe_int(payload.get("timestamp")) or int(time.time())}
+-        cached = await data._cached("extension:chain", 30, load)
++        cached = await data._cached("extension:chain", 10, load)
+         raw, at = cached["raw"], cached["at"]
+         if type(raw.get("current")) is not int or raw["current"] < 0:
+             raise data.PortalDataError("Chain unavailable")
+         count = raw["current"]
+         goal = next((v for v in (10,25,50,100,250,500,1000,2500,5000,10000,25000,50000,100000) if v > count), count + 1)
+         timeout = safe_int(raw.get("timeout"))
+-        result["chain"] = {"count": count, "goal": goal, "expiresAt": (at + timeout) * 1000 if 0 < timeout <= 3600 else None, "observedAt": at * 1000}
++        result["chain"] = {"count": count, "goal": goal, "id": safe_int(raw.get("id")) or None, "startedAt": ms(raw.get("start")),
++                           "expiresAt": (at + timeout) * 1000 if count > 0 and safe_int(raw.get("cooldown")) <= at and 0 < timeout <= 3600 else None, "observedAt": at * 1000}
+ 
+     async def targets():
+         source, presence = await asyncio.gather(data.targets_data(identity.guild.id, identity.member.id), data.target_status_data())
+@@ -144,31 +148,17 @@
+         result["favorites"] = result["favorites"][:50]
+ 
+     async def personal():
+-        link = await user_torn_link(identity.guild.id, identity.member.id)
+-        if not link:
+-            result["issues"]["travel"] = "Link your Torn account in BOSBOT to show your travel status"
+-            return
+-        members = await data._cached("faction:members", 60, data._faction_members_source)
+-        member = members.get(safe_int(link.get("torn_id")))
+-        if not member:
+-            result["issues"]["travel"] = "Your linked account is unavailable in BOSBOT's faction roster"
+-            return
+-        status = member.get("status") or {}
+-        state = str(status.get("state") or "Unknown")
+-        if state == "Unknown":
+-            return
+-        result["player"]["level"] = safe_int(member.get("level")) or None
+-        description = text(status.get("description"), 150)
+-        active = state in {"Traveling", "Abroad", "Returning"}
+-        country = next((value.split(" ", 1)[-1] for value in restock.COUNTRY_NAMES.values() if value.split(" ", 1)[-1].casefold() in description.casefold()), "Unknown destination")
+-        returning = state == "Returning" or "returning" in description.casefold()
+-        result["travel"] = {"active": active, "origin": country if returning else "Torn", "destination": "Torn" if returning else country,
+-                            "arrivesAt": ms(status.get("until")) if state in {"Traveling", "Returning"} else None,
+-                            "state": state, "description": description, "observedAt": observed("faction:members", 60)}
++        own = await personal_data(identity.guild.id, identity.member.id)
++        result["travel"], result["player"] = own["travel"], own["player"]
++        if own.get("issue"):
++            result["issues"]["travel"] = own["issue"]
++
++    async def company():
++        result["company"] = await company_summary(identity.member.id)
+ 
+     jobs = []
+     for key, loader, permission in (("war",war,allowed.get("war_report")), ("chain",chain,allowed.get("war_report") or allowed.get("faction")),
+-                                    ("targets",targets,allowed.get("targets")), ("stocks",stocks,allowed.get("restock")), ("travel",personal,allowed.get("home"))):
++                                    ("targets",targets,allowed.get("targets")), ("stocks",stocks,allowed.get("restock")), ("travel",personal,allowed.get("home")), ("company",company,allowed.get("company"))):
+         if permission:
+             jobs.append(section(key, loader))
+         else:
+--- /dev/null
++++ b/dashboard/extension_personal.py
+@@ -0,0 +1,111 @@
++"""Private extension views sourced only from BOSBOT's verified account and caches."""
++import asyncio
++import hashlib
++import time
++from copy import deepcopy
++
++from core.storage import get_raw_key
++from core.utils import safe_int
++from dashboard import data
++from dashboard.connection_storage import portal_account
++from dashboard.storage import user_torn_link
++from monitors import restock
++from services.company import _selection, employee_row
++
++_CACHE = {}
++_LOCKS = {}
++
++
++def country_name(value):
++    value = str(value or '').strip()
++    aliases = {'united arab emirates': 'UAE', 'uae': 'UAE', 'uk': 'United Kingdom'}
++    return aliases.get(value.casefold(), next((v.split(' ', 1)[-1] for v in restock.COUNTRY_NAMES.values() if v.split(' ', 1)[-1].casefold() == value.casefold()), value))
++
++
++def travel_row(status, travel, observed_at):
++    state = str(status.get('state') or 'Unknown')
++    description = str(status.get('description') or '')[:150]
++    if state in {'Unknown', '', 'None'}:
++        return None
++    active = state in {'Traveling', 'Travelling', 'Abroad', 'Returning'}
++    destination = country_name(travel.get('destination'))
++    returning = state == 'Returning' or 'returning' in description.casefold() or (active and destination == 'Torn')
++    described_country = next((v.split(' ', 1)[-1] for v in restock.COUNTRY_NAMES.values() if v.split(' ', 1)[-1].casefold() in description.casefold()), None)
++    if not described_country:
++        described_country = 'UAE' if 'united arab emirates' in description.casefold() else None
++    if not active:
++        destination = 'Torn'
++    elif not destination:
++        destination = 'Torn' if returning else described_country or 'Unknown destination'
++    arrival = safe_int(travel.get('arrival_at'))
++    # Faction status.until is not a reliable flight arrival timestamp.
++    return {'active': active, 'origin': described_country or 'Unknown origin' if returning else 'Torn',
++            'destination': destination, 'arrivesAt': arrival * 1000 if active and state != 'Abroad' and arrival > observed_at else None,
++            'state': state, 'description': description, 'observedAt': observed_at * 1000}
++
++
++async def personal_data(guild_id, user_id):
++    account, key = await asyncio.gather(portal_account(user_id), get_raw_key(user_id))
++    if key and account and account.get('tornConnected'):
++        fingerprint = hashlib.sha256(key.encode()).hexdigest()
++        async with _LOCKS.setdefault(user_id, asyncio.Lock()):
++            now = int(time.time())
++            cached = _CACHE.get(user_id)
++            if cached and cached[0] == fingerprint and now - cached[1] < 20:
++                return deepcopy(cached[2])
++            async def selection(name):
++                payload, code = await data.fetch_json('https://api.torn.com/v2/user/' + name,
++                                                      headers={'Authorization': 'ApiKey ' + key}, timeout=8, retries=0)
++                if code != 200 or not isinstance(payload, dict) or payload.get('error'):
++                    raise data.PortalDataError('Private travel unavailable')
++                return payload.get(name) or {}
++            profile, travel = await asyncio.gather(selection('profile'), selection('travel'))
++            if not safe_int(account.get('torn_id')) or safe_int(profile.get('id')) != safe_int(account.get('torn_id')):
++                raise data.PortalDataError('Private account mismatch')
++            result = {'travel': travel_row(profile.get('status') or {}, travel, now),
++                      'player': {'level': safe_int(profile.get('level')) or None}}
++            if result['travel'] is None:
++                result['issue'] = 'BOSBOT cannot confirm your current travel status'
++            _CACHE[user_id] = (fingerprint, now, deepcopy(result))
++            return result
++    # Members without a personal key can still use the shared faction observation.
++    link = await user_torn_link(guild_id, user_id)
++    members = await data._cached('faction:members', 60, data._faction_members_source) if link else {}
++    member = members.get(safe_int((link or {}).get('torn_id')))
++    if not member:
++        return {'travel': None, 'player': {'level': None}, 'issue': 'Connect your Torn account on BOSBOT for automatic travel detection'}
++    at = int((time.time() - max(0, 60 - (data._CACHE.get('faction:members', (time.monotonic(),))[0] - time.monotonic()))))
++    return {'travel': travel_row(member.get('status') or {}, {}, at), 'player': {'level': safe_int(member.get('level')) or None}}
++
++
++async def company_summary(user_id):
++    account, key = await asyncio.gather(portal_account(user_id), get_raw_key(user_id))
++    unavailable = {'isDirector': False, 'name': '', 'observedAt': None, 'employees': []}
++    if not key or not account or not account.get('tornConnected'):
++        return unavailable
++    fingerprint = hashlib.sha256(key.encode()).hexdigest()
++    cache_id = f'extension:company:{user_id}:{fingerprint}'
++    async def profile_source():
++        payload = await _selection('profile', key)
++        return {'profile': payload.get('company') or payload.get('profile') or {}, 'at': int(time.time())}
++    own = await data._cached(cache_id + ':profile', 60, profile_source)
++    profile = own['profile']
++    if not safe_int(account.get('torn_id')) or safe_int((profile.get('director') or {}).get('id')) != safe_int(account.get('torn_id')) or not safe_int(profile.get('id')):
++        return unavailable
++    async def employee_source():
++        response = await _selection('employees', key)
++        values = response.get('employees') or []
++        if isinstance(values, dict):
++            values = [{**v, 'id': v.get('id', k)} for k, v in values.items() if isinstance(v, dict)]
++        return {'employees': values if isinstance(values, list) else [], 'at': int(time.time())}
++    source = await data._cached(cache_id + ':employees:' + str(profile['id']), 180, employee_source)
++    rows = []
++    for raw in source['employees'][:100]:
++        if not isinstance(raw, dict) or not safe_int(raw.get('id')):
++            continue
++        row = employee_row(raw, source['at'])
++        value = row.get('addictionPenalty')
++        rows.append({'id': safe_int(row['id']), 'name': str(row.get('name') or '')[:80],
++                     'addictionEffect': value if type(value) in (int, float) else None})
++    return {'isDirector': True, 'name': str(profile.get('name') or '')[:100],
++            'observedAt': source['at'] * 1000, 'employees': rows}
+--- a/docs/browser-extension-integration.md
++++ b/docs/browser-extension-integration.md
+@@ -1,4 +1,4 @@
+-# Torn Companion / BOSBOT 0.24.5
++# Torn Companion / BOSBOT 0.24.6
+ 
+ The extension reads existing BOSBOT data. Provider keys, Discord credentials and site session cookies are never exported. Each browser must be explicitly approved by a logged-in account. Page permissions and account access are rechecked on every read, including after role changes. Members share the same observations; recommendations, favorites and travel are scoped to their account. No paid/admin-only extension gate is added.
+ 
+@@ -16,13 +16,16 @@
+ 
+ * War uses the portal's shared 60-second ranked-war cache and includes own/enemy score and lead target. Unknown scores/end times remain null.
+ * Target source uses the existing personal BOSBOT ranking/assignments and shared 20-second live status. Missing members and mismatched war rosters are withheld. Real recorded provider estimates may be displayed with source/confidence; BOS level-model fallbacks are withheld. No strength-based recommendation is inferred from a fallback in the extension feed.
+-* Hospital timers are enemy target statuses from the same current roster. Travel is only the paired user's linked member status from the shared 60-second faction cache. Unlinked/out-of-faction users get unavailable data.
+-* Chain uses one shared 30-second central request with single-flight protection. Missing timeout stays null; relative timeout is anchored to the provider timestamp.
++* Hospital timers are enemy target statuses from the same current roster. Travel uses the paired BOSBOT account's verified private user/profile + user/travel cache (20 seconds). Without a personal key, a linked faction observation is used; faction status.until is never treated as a flight arrival time.
++* Chain uses one shared 10-second central request with single-flight protection. Missing timeout stays null; relative timeout is anchored to the provider timestamp.
+ * Restock reuses the monitor's latest YATA payload when available, plus persistent interval history. Stale/out-of-order quantities become unknown. Predictions use the existing last-20, 5min–3h, weighted interval model; they are estimated windows, never exact schedules.
+ * Legacy starred item favorites and enhanced item favorites can both be imported from the paired account. Import/local edits do not mutate Discord subscriptions. Country/category subscription types are not converted into item favorites.
+ 
++* All supported stock items include Cost, Torn value and separate market-value observation time. Unknown prices remain null; Chrome filters and calculates gross profit from this feed.
++* Company profile is checked against the verified account's Torn director ID every 60 seconds before fetching/exporting employees (180-second shared private cache). Only addiction effectiveness penalties are exported; not raw addiction points, wages or working stats.
++
+ ## Deployment and rollback
+ 
+-The prepared release bundle contains source/assets/tests only, excluding .env, encryption.key and production data. Its SHA256 and verified 0.24.4 source baseline are pinned in the dedicated installer. The installer requires interactive sudo, creates a SQLite backup and retains the previous `/opt/bosbot/current` symlink, then starts 0.24.5 and checks health, schema, static assets and anonymous endpoint guards. Failure restores previous code. New extension tables are additive; retained data can remain during code rollback. The Git checkout is not pulled or published by this staged installer; the bundle records its verified base commit and source hashes.
++The prepared release bundle contains source/assets/tests only, excluding .env, encryption.key and production data. Its SHA256 and verified 0.24.5 source baseline are pinned in the dedicated installer. The installer requires interactive sudo, creates a SQLite backup and retains the previous `/opt/bosbot/current` symlink, then starts 0.24.6 and checks health, schema, static assets and anonymous endpoint guards. Failure restores previous code. New extension tables are additive; retained data can remain during code rollback. The Git checkout is not pulled or published by this staged installer; the bundle records its verified base commit and source hashes.
+ 
+-After activation, verify `/healthz` reports 0.24.5 Beta, anonymous snapshot reads return 401, and pairing opens the site's approval page. Install/reload extension 0.2.0, approve an account and compare active war/travel/stock values with BOSBOT. Repeat with a regular member and verify missing page access and revocation. Unit/Chromium fixtures cannot replace real member/provider acceptance.
++After activation, verify `/healthz` reports 0.24.6 Beta, anonymous snapshot reads return 401, and pairing opens the site's approval page. Install/reload extension 0.3.0, approve an account and compare active war/travel/stock values with BOSBOT. Repeat with a regular member and verify missing page access and revocation. Unit/Chromium fixtures cannot replace real member/provider acceptance.
+--- a/tests/test_extension.py
++++ b/tests/test_extension.py
+@@ -184,7 +184,7 @@
+         self.assertIsNone(result["war"])
+         self.assertIsNone(result["chain"])
+         self.assertEqual(result["targets"], [])
+-        self.assertEqual(len(result["issues"]), 5)
++        self.assertEqual(len(result["issues"]), 6)
+ 
+     async def test_provider_failure_is_unknown_and_never_exposes_credentials(self):
+         async def fail(*args):
+@@ -231,14 +231,15 @@
+         cached = {
+             'targets:current-war-context': {"id": 5, "phase": "active", "enemyName": "Fixture enemy faction", "score": 500, "enemyScore": 400, "targetScore": 1000, "end": 0},
+             'extension:chain': {"raw": {"current": 49, "timeout": None}, "at": now},
+-            'restock:all': {"countries": [{"code": "swi", "name": "Switzerland", "items": [{"itemId": 206, "name": "Xanax", "quantity": 50, "observedAt": now, "lastRestock": now-400, "nextRestock": now+200, "intervalHistory": [600, 610]}]}, {"code": "mex", "name": "Mexico", "items": [{"itemId": 258, "name": "Jaguar Plushie", "quantity": 5, "observedAt": now}]}]},
++            'restock:all': {"countries": [{"code": "swi", "name": "Switzerland", "items": [{"itemId": 206, "name": "Xanax", "quantity": 50, "cost": 100, "marketValue": 160, "priceObservedAt": now, "observedAt": now, "lastRestock": now-400, "nextRestock": now+200, "intervalHistory": [600, 610]}]}, {"code": "mex", "name": "Mexico", "items": [{"itemId": 258, "name": "Jaguar Plushie", "quantity": 5, "observedAt": now}]}]},
+             'faction:members': {456: {"level": 40, "status": {"state": "Traveling", "description": "Traveling to Japan", "until": now+600}}},
+         }
+         async def cache(key, ttl, loader):
+             return cached[key]
+         with (patch.object(feed.data, '_cached', cache), patch.object(feed.data, 'targets_data', AsyncMock(return_value=source)),
+               patch.object(feed.data, 'target_status_data', AsyncMock(return_value=presence)),
+-              patch.object(feed, 'user_torn_link', AsyncMock(return_value={"torn_id": 456})),
++              patch.object(feed, 'personal_data', AsyncMock(return_value={"travel": {"active": True, "origin": "Torn", "destination": "Japan", "arrivesAt": (now+600)*1000, "state": "Traveling", "description": "Traveling to Japan", "observedAt": now*1000}, "player": {"level": 40}})),
++              patch.object(feed, 'company_summary', AsyncMock(return_value={"isDirector": False, "name": "", "observedAt": None, "employees": []})),
+               patch.object(feed.data, 'get_user_restock_favorites', AsyncMock(return_value={("mex", "jaguar plushie"), ("swi", "xanax")})) as legacy,
+               patch.object(feed, 'list_restock_favorites_v2', AsyncMock(return_value=[{"item_id": 206, "item_name": "Xanax", "country": "swi", "minimum_stock": 7, "is_active": True}])) as favorites):
+             result = await feed.snapshot(identity(), PORTAL_PAGE_DEFAULTS)
+@@ -256,3 +257,54 @@
+         self.assertEqual(result['stocks'][0]['restock']['kind'], 'estimated')
+         if os.getenv('BOSBOT_CONTRACT_FIXTURE'):
+             Path(os.environ['BOSBOT_CONTRACT_FIXTURE']).write_text(json.dumps(result, indent=2) + '\n')
++
++class ExtensionPrivateViewTests(unittest.IsolatedAsyncioTestCase):
++    async def asyncSetUp(self):
++        from dashboard import extension_personal as own
++        self.own = own
++        own._CACHE.clear()
++        feed.data._CACHE.clear()
++
++    def test_countries_flight_and_returning_no_fabricated_arrival(self):
++        now = int(time.time())
++        self.assertIsNone(self.own.travel_row({}, {}, now))
++        row = self.own.travel_row({'state': 'Traveling', 'description': 'Traveling to United Arab Emirates', 'until': now+30}, {}, now)
++        self.assertEqual(row['destination'], 'UAE')
++        self.assertIsNone(row['arrivesAt'])
++        row = self.own.travel_row({'state': 'Traveling', 'description': 'Returning to Torn from Japan'}, {'destination': 'Torn', 'arrival_at': now+300}, now)
++        self.assertEqual(row['origin'], 'Japan')
++        self.assertEqual(row['destination'], 'Torn')
++        self.assertEqual(row['arrivesAt'], (now+300)*1000)
++        self.assertFalse(self.own.travel_row({'state': 'Okay'}, {'destination': 'Japan', 'arrival_at': now-1}, now)['active'])
++
++    async def test_personal_api_identity_cache_and_country(self):
++        now = int(time.time())
++        async def fetch(url, **kwargs):
++            if url.endswith('/profile'):
++                return {'profile': {'id': 456, 'level': 40, 'status': {'state': 'Traveling', 'description': 'Traveling to UAE'}}}, 200
++            return {'travel': {'destination': 'UAE', 'arrival_at': now+600, 'time_left': 600}}, 200
++        with (patch.object(self.own, 'get_raw_key', AsyncMock(return_value='test-private-key')), patch.object(self.own, 'portal_account', AsyncMock(return_value={'tornConnected': True, 'torn_id': 456})), patch.object(feed.data, 'fetch_json', AsyncMock(side_effect=fetch)) as api):
++            first, second = await asyncio.gather(self.own.personal_data(11,22), self.own.personal_data(11,22))
++            self.assertEqual(api.await_count, 2)
++            self.assertEqual(first, second)
++            self.assertEqual(first['travel']['destination'], 'UAE')
++            self.assertNotIn('test-private-key', json.dumps(first))
++            self.own._CACHE.clear()
++            with patch.object(self.own, 'portal_account', AsyncMock(return_value={'tornConnected': True, 'torn_id': 999})):
++                with self.assertRaises(feed.data.PortalDataError):
++                    await self.own.personal_data(11,22)
++
++    async def test_non_director_never_fetches_or_exports_employee_addiction(self):
++        with (patch.object(self.own, 'get_raw_key', AsyncMock(return_value='TEST_KEY')), patch.object(self.own, 'portal_account', AsyncMock(return_value={'tornConnected': True, 'torn_id': 456})), patch.object(self.own, '_selection', AsyncMock(return_value={'company': {'id': 5, 'director': {'id': 999}}})) as api):
++            result = await self.own.company_summary(22)
++        api.assert_awaited_once_with('profile', 'TEST_KEY')
++        self.assertFalse(result['isDirector'])
++        self.assertEqual(result['employees'], [])
++
++    async def test_director_addiction_is_effectiveness_penalty_unknown_preserved(self):
++        async def selection(name, key):
++            return {'company': {'id': 5, 'name': 'Fixture Co', 'director': {'id': 456}}} if name == 'profile' else {'employees': [{'id': 1, 'name': 'A', 'effectiveness': {'addiction': -8}}, {'id': 2, 'name': 'B'}]}
++        with (patch.object(self.own, 'get_raw_key', AsyncMock(return_value='TEST_KEY')), patch.object(self.own, 'portal_account', AsyncMock(return_value={'tornConnected': True, 'torn_id': 456})), patch.object(self.own, '_selection', AsyncMock(side_effect=selection))):
++            result = await self.own.company_summary(22)
++        self.assertTrue(result['isDirector'])
++        self.assertEqual([e['addictionEffect'] for e in result['employees']], [-8, None])

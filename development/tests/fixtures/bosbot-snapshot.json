@@ -1,0 +1,121 @@
+{
+  "source": "live",
+  "provider": "bosbot",
+  "generatedAt": 1791211412830,
+  "war": {
+    "active": true,
+    "id": 5,
+    "opponentId": null,
+    "opponent": "Fixture enemy faction",
+    "score": 500,
+    "enemyScore": 400,
+    "targetScore": 1000,
+    "endsAt": null,
+    "observedAt": 1791211412831
+  },
+  "chain": {
+    "count": 49,
+    "goal": 50,
+    "id": null,
+    "startedAt": null,
+    "expiresAt": null,
+    "observedAt": 1791211412000
+  },
+  "travel": {
+    "active": true,
+    "origin": "Torn",
+    "destination": "Japan",
+    "arrivesAt": 1791212012000,
+    "state": "Traveling",
+    "description": "Traveling to Japan",
+    "observedAt": 1791211412000
+  },
+  "company": {
+    "isDirector": false,
+    "name": "",
+    "observedAt": null,
+    "employees": []
+  },
+  "player": {
+    "level": 40
+  },
+  "targets": [
+    {
+      "id": 123,
+      "name": "Fixture enemy",
+      "level": 30,
+      "status": "Okay",
+      "activity": "online",
+      "observedAt": 1791211412000,
+      "hospitalUntil": null,
+      "wins": null,
+      "losses": null,
+      "battleStats": null,
+      "statsSource": null,
+      "recommendation": {
+        "score": 125,
+        "reasons": [
+          "Currently attackable",
+          "Battle stats unknown; no level-based strength estimate is used"
+        ],
+        "confidence": "low",
+        "label": "BOSBOT availability"
+      }
+    }
+  ],
+  "stocks": [
+    {
+      "itemId": 206,
+      "name": "Xanax",
+      "country": "Switzerland",
+      "cost": 100,
+      "tornValue": 160,
+      "priceObservedAt": 1791211412000,
+      "stock": 50,
+      "observedAt": 1791211412000,
+      "restock": {
+        "kind": "estimated",
+        "earliest": 1791211522000,
+        "latest": 1791211702000,
+        "confidence": "low",
+        "samples": 2,
+        "lastSeenRestock": 1791211012000,
+        "intervalHistory": [
+          600000,
+          610000
+        ]
+      }
+    },
+    {
+      "itemId": 258,
+      "name": "Jaguar Plushie",
+      "country": "Mexico",
+      "cost": null,
+      "tornValue": null,
+      "priceObservedAt": null,
+      "stock": 5,
+      "observedAt": 1791211412000,
+      "restock": {
+        "kind": "unknown",
+        "reason": "BOSBOT has insufficient recent restock observations"
+      }
+    }
+  ],
+  "favorites": [
+    {
+      "itemId": 206,
+      "name": "Xanax",
+      "country": "Switzerland",
+      "minimumStock": 7,
+      "alert": true
+    },
+    {
+      "itemId": 258,
+      "name": "Jaguar Plushie",
+      "country": "Mexico",
+      "minimumStock": 1,
+      "alert": true
+    }
+  ],
+  "issues": {}
+}

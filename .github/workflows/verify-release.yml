@@ -1,0 +1,67 @@
+name: Verify and package TornDashboard
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: development/package-lock.json
+      - run: npm run setup
+      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+        working-directory: development
+      - run: npm run test:e2e
+      - run: npm run package
+      - name: Check release version
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node -e 'if (process.env.RELEASE_TAG !== "v" + require("./manifest.json").version) throw new Error("Tag and manifest versions differ")'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: TornDashboard
+          path: |
+            development/dist/TornDashboard.zip
+            development/dist/SHA256SUMS
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: failure()
+        with:
+          name: browser-test-results
+          path: development/test-results
+          retention-days: 7
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: TornDashboard
+          path: release
+      - name: Create release with one extension package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: gh release create "$RELEASE_TAG" release/TornDashboard.zip release/SHA256SUMS --repo "$RELEASE_REPOSITORY" --target "$RELEASE_SHA" --verify-tag --title "TornDashboard $RELEASE_TAG" --generate-notes

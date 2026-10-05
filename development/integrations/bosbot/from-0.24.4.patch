@@ -1,0 +1,1160 @@
+diff --git a/README.md b/README.md
+index 177575b..df0d58a 100644
+--- a/README.md
++++ b/README.md
+@@ -11,7 +11,15 @@ High-performance Discord bot for Torn City factions. It tracks faction operation
+ * **SQLite storage:** Async SQLite database with WAL mode, cached guild settings, encrypted optional user API keys, and persistent alert subscriptions.
+ * **Safer API handling:** Most read-only faction utilities can use the server-side faction key. Personal API keys remain optional for verification and user-specific lookups.
+ 
+-## Latest Release: 0.24.4 Beta
++## Latest Release: 0.24.5 Beta
++
++* Torn Companion pairs through an authenticated BOSBOT approval page. Each browser receives a revocable read-only credential scoped to its account/server; provider keys and website cookies stay on the server.
++* `/api/extension/snapshot` serves war scores, chain, recommended targets, hospital timers, personal travel and abroad stocks using shared BOSBOT caches. Existing page/Discord permissions apply to every read.
++* The extension preserves BOSBOT ranking and reasons, removes level-based battle-stat fallbacks and uses unknown for absent data. Restock windows stay estimated; provider timestamps remain visible.
++* Browser connections expire after 30 days. Approve via `/extension/connect` and manage/revoke at `/extension/devices`. Chrome favorites/layout remain local; importing favorites does not change Discord subscriptions.
++* Server/device/provider tests: `.venv/bin/python -m unittest discover -s tests -p 'test_*.py'`. See `docs/browser-extension-integration.md` for protocol, deployment and account acceptance.
++
++## Previous Release: 0.24.4 Beta
+ 
+ * Feedback keeps a stable form reference across the asynchronous save, prevents duplicate submits and retains drafts on failed sends. A later inbox refresh failure cannot turn a saved ticket into a failed-send message. Admin navigation routes personal Feedback to Feedback Inbox, including saved shortcuts; members retain their private submission history.
+ * Admins configure **Restock Center → Discord channel** independently of personal favorites/DMs. Modes: important (Xanax, plushies, flowers), exact checked products (up to five per country), or highest estimated positive unit profit (one to five per country, configurable minimum). The existing channels/roles remain in use.
+diff --git a/core/changelog.py b/core/changelog.py
+index e2c9fc2..08bd88e 100644
+--- a/core/changelog.py
++++ b/core/changelog.py
+@@ -2,6 +2,14 @@
+ #  CHANGELOG — versioned release notes
+ # ═══════════════════════════════════════════
+ CHANGELOG: dict = {
++    "0.24.6 Beta": {
++        "en": ["Torn Companion receives all travel products with Cost, Torn market value and observation times.", "Flight country and arrival use the verified BOSBOT account's private Torn travel API, with a shared faction-status fallback.", "Company directors can view employee addiction effectiveness penalties. Chain observations refresh every 10 seconds; keys remain server-side."],
++        "tr": ["Torn Companion tüm seyahat ürünlerini Cost, Torn değeri ve gözlem zamanlarıyla alır.", "Ülke ve varış, BOSBOT hesabının doğrulanmış kişisel seyahat verisinden algılanır.", "Şirket direktörlerine çalışanların addiction verimlilik cezası gösterilir; chain önbelleği 10 saniyede yenilenir."],
++    },
++    "0.24.5 Beta": {
++        "en": ["Torn Companion can pair with your BOSBOT account for read-only war, targets, hospital, chain, travel and restock data.", "Connections are account-scoped, expire after 30 days and can be revoked at /extension/devices. Existing page permissions apply.", "Live widgets share BOSBOT caches. Missing strength data remains unknown; level-based stat fallbacks are excluded. Restock times are observed estimates."],
++        "tr": ["Torn Companion, salt okunur savaş, hedef, hastane, chain, seyahat ve restock verileri için BOSBOT hesabınıza bağlanır.", "Tarayıcı bağlantıları hesaba özeldir, 30 gün geçerlidir ve /extension/devices üzerinden iptal edilir. Mevcut sayfa izinleri geçerlidir.", "Eklentiler BOSBOT önbelleğini paylaşır. Güç verisi yoksa bilinmiyor gösterilir; restock saatleri gözlemden tahmindir."],
++    },
+     "0.24.4 Beta": {
+         "en": ["Feedback no longer reports a reset error after a successful save. Administrators use one Feedback Inbox with a new-request badge.", "Discord restocks are grouped in country tables, with important, selected, or highest-profit channel modes configurable in Restock Center.", "Provider observation times, persistent delivery receipts and restart-safe baselines prevent stale and duplicate alerts. Personal opt-in DMs remain independent."],
+         "tr": ["Feedback gönderiminden sonraki reset hatası giderildi. Yöneticiler tek Feedback Inbox ve yeni talep sayacını kullanır.", "Discord restock bildirimleri ülke tablolarında toplanır; önemli, seçili veya en kârlı ürünler Restock Center'dan ayarlanır.", "Eski veriden bildirim, açılış spamı ve tekrar gönderimler engellenir. Kişisel DM abonelikleri korunur."],
+@@ -791,6 +799,12 @@ CHANGELOG: dict = {
+ 
+ 
+ RELEASE_DETAILS: dict[str, dict] = {
++    "0.24.5 Beta": {
++        "new": ["Account-approved read-only Torn Companion connection with war, targets, hospital, chain, travel and restock feed.", "Thirty-day browser credentials and account-scoped revocation at /extension/devices."],
++        "improved": ["Connected members share BOSBOT caches and the restock monitor's observations.", "No Torn/Discord/provider keys or website session cookies are copied to the extension."],
++        "fixed": ["Missing battle stats stay unknown; BOS level-model strength fallbacks are withheld from the extension.", "Stale stocks, expired prediction windows and inconsistent war rosters are withheld."],
++        "knownIssues": ["Installation and first account approval are required. Existing BOSBOT page permissions determine accessible sections.", "Restock windows are observation-based estimates. Provider outages, absent chain timeout, or an unlinked/out-of-faction travel account produce unknown data.", "Browser favorites and layout remain local. Favorite import does not change BOSBOT subscriptions."],
++    },
+     "0.24.4 Beta": {
+         "new": ["Administrator-only Discord channel selection in Restock Center: important items, checked products or highest estimated profit per country.", "Country tables show stock, estimated profit per unit and source observation time."],
+         "improved": ["Grouped channel alerts and personal DMs replace per-item message bursts.", "Live boards update in place; channel errors do not create replacement message spam.", "Feedback Inbox shows a new-request count across administrator pages."],
+diff --git a/core/config.py b/core/config.py
+index 2952e57..7d38c1d 100644
+--- a/core/config.py
++++ b/core/config.py
+@@ -41,7 +41,7 @@ def _feature_flag(name: str, default: bool = True) -> bool:
+ BOSBOT_RELEASE_NOTES_ADMIN = _feature_flag("BOSBOT_RELEASE_NOTES_ADMIN")
+ BOSBOT_STOCK_MARKET = _feature_flag("BOSBOT_STOCK_MARKET")
+ 
+-CURRENT_VERSION = "0.24.4 Beta"
++CURRENT_VERSION = "0.24.6 Beta"
+ 
+ # ── Encryption ──────────────────────────────────────────
+ _ENC = "encryption.key"
+diff --git a/core/database.py b/core/database.py
+index 6f2d73a..a9f78c8 100644
+--- a/core/database.py
++++ b/core/database.py
+@@ -1840,6 +1840,8 @@ async def init_db():
+         print("[DB] SQLite Database and tables loaded successfully.")
+         from dashboard.bazaar_storage import SCHEMA as bazaar_schema
+         await db.executescript(bazaar_schema)
++        from dashboard.extension_storage import SCHEMA as extension_schema
++        await db.executescript(extension_schema)
+         from dashboard.chat_storage import SCHEMA as chat_schema
+         await db.executescript(chat_schema)
+         await db.commit()
+diff --git a/dashboard/auth.py b/dashboard/auth.py
+index 7c02a91..4537c55 100644
+--- a/dashboard/auth.py
++++ b/dashboard/auth.py
+@@ -179,6 +179,18 @@ async def authorized_identity(
+     session = signer.verify(request.cookies.get(COOKIE_NAME))
+     if not session:
+         return None
++    identity = await identity_for_session(bot, session)
++    if not identity:
++        return None
++    if require_csrf and not hmac.compare_digest(
++        request.headers.get("X-CSRF-Token", ""), session.csrf_token
++    ):
++        raise web.HTTPForbidden(text="Invalid CSRF token")
++    return identity
++
++
++async def identity_for_session(bot: discord.Client, session: SessionData) -> DashboardIdentity | None:
++    """Recheck current account and roles for both website sessions and scoped devices."""
+     if session.auth_mode == "torn":
+         guild = bot.get_guild(int(session.guild_id))
+         account = await portal_account(session.user_id)
+@@ -204,10 +216,6 @@ async def authorized_identity(
+         if not authorized:
+             return None
+         guild, member, member_is_admin, member_is_oc_supervisor = authorized
+-    if require_csrf and not hmac.compare_digest(
+-        request.headers.get("X-CSRF-Token", ""), session.csrf_token
+-    ):
+-        raise web.HTTPForbidden(text="Invalid CSRF token")
+     return DashboardIdentity(
+         session=session,
+         guild=guild,
+diff --git a/dashboard/data.py b/dashboard/data.py
+index 867b6fc..d08c7bd 100644
+--- a/dashboard/data.py
++++ b/dashboard/data.py
+@@ -357,14 +357,17 @@ async def _restock_source() -> dict:
+     if not YATA_API_KEY:
+         raise PortalDataError("The YATA integration key is not configured.")
+     await restock_monitor._refresh_mv()
+-    payload, status = await fetch_json(
+-        f"https://yata.yt/api/v1/travel/export/?key={YATA_API_KEY}",
+-        headers={"User-Agent": "BOSBOT/1.0"},
+-        timeout=18,
+-        retries=2,
+-    )
+-    if status != 200 or not isinstance(payload, dict):
+-        raise PortalDataError("Live abroad stock could not be loaded from YATA.")
++    if restock_monitor._stock_snapshot is not None and time.time() - restock_monitor._stock_snapshot_at < 45:
++        payload = restock_monitor._stock_snapshot
++    else:
++        payload, status = await fetch_json(
++            f"https://yata.yt/api/v1/travel/export/?key={YATA_API_KEY}",
++            headers={"User-Agent": "BOSBOT/1.0"},
++            timeout=18,
++            retries=2,
++        )
++        if status != 200 or not isinstance(payload, dict):
++            raise PortalDataError("Live abroad stock could not be loaded from YATA.")
+     stocks = payload.get("stocks", payload)
+     history = await get_all_restock_items()
+     now = int(time.time())
+@@ -390,9 +393,12 @@ async def _restock_source() -> dict:
+                     "quantity": quantity,
+                     "cost": cost,
+                     "marketValue": market_value,
++                    "priceObservedAt": int(restock_monitor._mv_cache_ts) or None,
+                     **pricing,
+                     "opportunityScore": opportunity_score,
+                     "revalidateAt": now + 120,
++                    "observedAt": safe_int((stocks.get(code, {}) or {}).get("update")) if safe_int((stocks.get(code, {}) or {}).get("update")) >= safe_int(saved.get("observed_at")) else 0,
++                    "intervalHistory": [restock_times[i + 1] - restock_times[i] for i in range(len(restock_times) - 1)],
+                     "lastRestock": safe_int(saved.get("last_restock_ts")),
+                     "nextRestock": restock_monitor._predict_next(restock_times, now),
+                     "averageInterval": restock_monitor._weighted_avg(
+@@ -1033,6 +1039,8 @@ async def _faction_source(guild_id: int) -> dict:
+                     "image": image,
+                     "name": name,
+                     "quantity": quantity,
++                    "observedAt": safe_int((stocks.get(code, {}) or {}).get("update")) if safe_int((stocks.get(code, {}) or {}).get("update")) >= safe_int(saved.get("observed_at")) else 0,
++                    "intervalHistory": [restock_times[i + 1] - restock_times[i] for i in range(len(restock_times) - 1)],
+                     "lastRestock": safe_int(saved.get("last_restock_ts")),
+                     "nextRestock": next_restock,
+                 }
+@@ -1628,6 +1636,10 @@ async def _current_ranked_war() -> dict | None:
+     return {
+         "id": war_id,
+         "phase": phase,
++        "score": (factions.get(str(faction_id)) or {}).get("score"),
++        "enemyScore": enemy_summary.get("score"),
++        "targetScore": (selected.get("war") or {}).get("target"),
++        "end": safe_int((selected.get("war") or {}).get("end")),
+         "start": _war_start_ts(selected),
+         "enemyId": enemy_id,
+         "enemyName": str(enemy_summary.get("name") or f"Faction #{enemy_id}"),
+diff --git a/dashboard/server.py b/dashboard/server.py
+index c00105d..92cc1ed 100644
+--- a/dashboard/server.py
++++ b/dashboard/server.py
+@@ -96,6 +96,8 @@ class DashboardServer(commands.Cog):
+             client_max_size=1024 * 1024,
+         )
+         api.register(app)
++        from dashboard.extension_api import ExtensionApi
++        ExtensionApi(api).register(app)
+         app.router.add_static("/assets/", STATIC_DIR, show_index=False)
+ 
+         async def index(request: web.Request):
+diff --git a/docs/browser-extension-plan.md b/docs/browser-extension-plan.md
+index efbe9a5..ba5dbd6 100644
+--- a/docs/browser-extension-plan.md
++++ b/docs/browser-extension-plan.md
+@@ -1,3 +1,7 @@
++# Historical research (0.24.4)
++
++The account-paired dashboard feed is implemented in 0.24.5; see [browser-extension-integration.md](browser-extension-integration.md). The notification-only ideas below remain future work.
++
+ # BOSBOT Companion extension: feasibility review, 05 Oct 2026
+ 
+ Status: proposal, not implemented or published. The Feedback/restock release does not install an extension or change browser permissions.
+diff --git a/monitors/restock.py b/monitors/restock.py
+index 72ddb9d..0f97d23 100644
+--- a/monitors/restock.py
++++ b/monitors/restock.py
+@@ -40,6 +40,8 @@ LOG_FILE = "data/restock_log.txt"
+ 
+ _mv_cache:    dict  = {}   # item_name -> market_value
+ _mv_cache_ts: float = 0.0
++_stock_snapshot: dict | None = None
++_stock_snapshot_at: float = 0.0
+ 
+ 
+ # ── Helper functions ────────────────────────────────
+@@ -183,6 +185,8 @@ class RestockMonitorCog(commands.Cog):
+         saved = await get_all_restock_items()
+         changed, rows = observe_stocks(yd, saved, now, _mv_cache)
+         await update_restock_items(changed)
++        global _stock_snapshot, _stock_snapshot_at
++        _stock_snapshot, _stock_snapshot_at = yd, time.time()
+         for row in rows:
+             updated = changed.get(row["key"], {})
+             event_at = safe_int(updated.get("last_restock_ts"))
+diff --git a/dashboard/extension_api.py b/dashboard/extension_api.py
+new file mode 100644
+index 0000000..b79b31b
+--- /dev/null
++++ b/dashboard/extension_api.py
+@@ -0,0 +1,167 @@
++"""Account-approved, revocable, read-only extension API. No website session is exported."""
++import hmac
++import re
++import time
++from collections import deque
++from html import escape
++from urllib.parse import urlencode
++
++from aiohttp import web
++from dashboard.auth import SessionData, identity_for_session
++from dashboard import extension_storage as store
++from dashboard.extension_feed import snapshot
++
++EXTENSION_ID = re.compile(r"^[a-p]{32}$")
++OPAQUE = re.compile(r"^[A-Za-z0-9_-]{20,100}$")
++
++
++class ExtensionApi:
++    def __init__(self, portal):
++        self.portal = portal
++        self.starts = deque(maxlen=100)
++        self.polls = {}
++        self.reads = {}
++
++    def register(self, app):
++        app.router.add_post("/api/extension/pair/start", self.start)
++        app.router.add_post("/api/extension/pair/poll", self.poll)
++        app.router.add_post("/api/extension/pair/approve", self.approve)
++        app.router.add_get("/api/extension/snapshot", self.feed)
++        app.router.add_delete("/api/extension/device", self.disconnect)
++        app.router.add_post("/api/extension/devices/revoke", self.revoke)
++        app.router.add_get("/extension/connect", self.connect_page)
++        app.router.add_get("/extension/devices", self.devices_page)
++
++    def origin(self, request, extension_id):
++        origin = request.headers.get("Origin")
++        if origin and origin != f"chrome-extension://{extension_id}":
++            raise web.HTTPForbidden(text="Invalid extension origin")
++
++    async def body(self, request):
++        if request.content_length and request.content_length > 2048:
++            raise web.HTTPRequestEntityTooLarge(max_size=2048, actual_size=request.content_length)
++        try:
++            body = await request.json()
++        except Exception:
++            raise web.HTTPBadRequest(text="Invalid request") from None
++        if not isinstance(body, dict):
++            raise web.HTTPBadRequest(text="Invalid request")
++        return body
++
++    def extension(self, value):
++        if not isinstance(value, str) or not EXTENSION_ID.fullmatch(value):
++            raise web.HTTPBadRequest(text="Invalid extension ID")
++        return value
++
++    def opaque(self, value):
++        if not isinstance(value, str) or not OPAQUE.fullmatch(value):
++            raise web.HTTPBadRequest(text="Invalid pairing request")
++        return value
++
++    async def start(self, request):
++        extension_id = self.extension((await self.body(request)).get("extensionId"))
++        self.origin(request, extension_id)
++        now = time.monotonic()
++        # Global bound protects SQLite even when remote addresses are behind a proxy.
++        if len(self.starts) >= 60 and now - self.starts[-60] < 60:
++            raise web.HTTPTooManyRequests(text="Try pairing again later", headers={"Retry-After": "60"})
++        self.starts.append(now)
++        try:
++            result = await store.start(extension_id)
++        except ValueError:
++            raise web.HTTPTooManyRequests(text="Try pairing again later") from None
++        result["verificationUrl"] = self.portal.public_url + "/extension/connect?" + urlencode({"pairingId": result["pairingId"]})
++        return web.json_response(result)
++
++    async def poll(self, request):
++        body = await self.body(request)
++        extension_id = self.extension(body.get("extensionId"))
++        pair_id, secret = self.opaque(body.get("pairingId")), self.opaque(body.get("pollingSecret"))
++        self.origin(request, extension_id)
++        now = time.monotonic()
++        if now - self.polls.get(pair_id, -10) < 1:
++            raise web.HTTPTooManyRequests(text="Poll no more than once per second", headers={"Retry-After": "1"})
++        self.polls = {key: value for key, value in self.polls.items() if now - value < 300}
++        if len(self.polls) >= 500 and pair_id not in self.polls:
++            raise web.HTTPTooManyRequests(text="Try pairing again later")
++        self.polls[pair_id] = now
++        return web.json_response(await store.poll(pair_id, secret, extension_id))
++
++    async def device(self, request):
++        if not request.headers.get("Authorization", "").startswith("Bearer "):
++            raise web.HTTPUnauthorized(text="Connect your BOSBOT account in extension settings")
++        extension_id = self.extension(request.headers.get("X-Extension-Id"))
++        self.origin(request, extension_id)
++        header = request.headers.get("Authorization", "")
++        token = header[7:] if header.startswith("Bearer ") else ""
++        if not OPAQUE.fullmatch(token):
++            raise web.HTTPUnauthorized(text="Connect your BOSBOT account in extension settings")
++        device = await store.device(token, extension_id)
++        if not device:
++            raise web.HTTPUnauthorized(text="BOSBOT connection expired or revoked; reconnect in extension settings")
++        session = SessionData(device["guild_id"], device["user_id"], "", device["expires_at"], device["auth_mode"])
++        identity = await identity_for_session(self.portal.bot, session)
++        if not identity:
++            raise web.HTTPForbidden(text="Your BOSBOT account no longer has access")
++        return device, identity
++
++    async def feed(self, request):
++        device, identity = await self.device(request)
++        now = time.monotonic()
++        if now - self.reads.get(device["id"], -10) < 1:
++            raise web.HTTPTooManyRequests(text="Refresh no more than once per second", headers={"Retry-After": "1"})
++        self.reads = {key: value for key, value in self.reads.items() if now - value < 300}
++        if len(self.reads) >= 5000 and device["id"] not in self.reads:
++            raise web.HTTPTooManyRequests(text="Try refreshing again later")
++        self.reads[device["id"]] = now
++        allowed = await self.portal._allowed_pages(identity)
++        return web.json_response(await snapshot(identity, allowed))
++
++    async def disconnect(self, request):
++        device, identity = await self.device(request)
++        await store.revoke(device["id"], identity.guild.id, identity.session.user_id)
++        return web.json_response({"revoked": True})
++
++    def page(self, title, content):
++        return web.Response(text=f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BOSBOT · {escape(title)}</title><link rel="stylesheet" href="/assets/extension.css"></head><body><main><h1>{escape(title)}</h1>{content}</main></body></html>', content_type="text/html", headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
++
++    async def connect_page(self, request):
++        pair_id = self.opaque(request.query.get("pairingId"))
++        pair = await store.pairing(pair_id)
++        if not pair:
++            return self.page("Pairing expired", "<p>Start a new connection in Torn Companion settings.</p>")
++        try:
++            identity = await self.portal._identity(request, admin=False)
++        except web.HTTPUnauthorized:
++            return self.page("Connect Torn Companion", '<p>Log in to BOSBOT in a separate tab, then reload this page.</p><a href="/" target="_blank" rel="noopener">Log in to BOSBOT</a><p><a href="">I have logged in · reload</a></p>')
++        return self.page("Connect Torn Companion", f'<p>Account: <strong>{escape(identity.username)}</strong></p><p>This browser can read the war, targets, chain, travel and restock sections your account can access. It cannot post Discord messages or access API keys.</p><p>Approve only a connection you started. Compare this ID with the one in extension settings:</p><code>{escape(pair["extension_id"])}</code><form method="post" action="/api/extension/pair/approve"><input type="hidden" name="pairingId" value="{escape(pair_id)}"><input type="hidden" name="csrf" value="{escape(identity.session.csrf_token)}"><button>Approve read-only connection</button></form><a href="/extension/devices">Manage connected browsers</a>')
++
++    async def form_identity(self, request):
++        if request.headers.get("Origin") != self.portal.public_url:
++            raise web.HTTPForbidden(text="Invalid website origin")
++        if request.content_length and request.content_length > 2048:
++            raise web.HTTPBadRequest(text="Invalid request")
++        identity = await self.portal._identity(request, admin=False)
++        body = await request.post()
++        if not hmac.compare_digest(str(body.get("csrf", "")), identity.session.csrf_token):
++            raise web.HTTPForbidden(text="Invalid CSRF token")
++        return identity, body
++
++    async def approve(self, request):
++        identity, body = await self.form_identity(request)
++        if not await store.approve(self.opaque(body.get("pairingId")), identity):
++            raise web.HTTPBadRequest(text="Pairing expired or already approved")
++        return self.page("Connection approved", "<p>Return to Torn Companion settings. The connection will complete automatically.</p><a href='/extension/devices'>Manage connected browsers</a>")
++
++    async def devices_page(self, request):
++        identity = await self.portal._identity(request, admin=False)
++        rows = await store.devices(identity)
++        content = "<p>Connections expire after 30 days. Revocation takes effect on the next refresh.</p>"
++        for row in rows:
++            content += f'<form method="post" action="/api/extension/devices/revoke"><code>{escape(row["extension_id"])}</code><input type="hidden" name="deviceId" value="{escape(row["id"])}"><input type="hidden" name="csrf" value="{escape(identity.session.csrf_token)}"><button>Revoke</button></form>'
++        return self.page("Connected browsers", content or "<p>No browsers connected.</p>")
++
++    async def revoke(self, request):
++        identity, body = await self.form_identity(request)
++        await store.revoke(self.opaque(body.get("deviceId")), identity.guild.id, identity.session.user_id)
++        raise web.HTTPSeeOther(location="/extension/devices")
+diff --git a/dashboard/extension_feed.py b/dashboard/extension_feed.py
+new file mode 100644
+index 0000000..0f0d87c
+--- /dev/null
++++ b/dashboard/extension_feed.py
+@@ -0,0 +1,167 @@
++"""Translate BOSBOT's shared portal caches into the companion contract; never expose keys."""
++import asyncio
++import math
++import time
++
++from core.utils import safe_int
++from dashboard import data
++from dashboard.storage import user_torn_link
++from dashboard.operations_storage import list_restock_favorites_v2
++from monitors import restock
++from dashboard.extension_personal import personal_data, company_summary
++
++
++def ms(value):
++    return safe_int(value) * 1000 or None
++
++
++def text(value, limit=80):
++    return str(value or "")[:limit]
++
++
++def observed(key, ttl):
++    cached = data._CACHE.get(key)
++    return int((time.time() - max(0, ttl - (cached[0] - time.monotonic()))) * 1000) if cached else int(time.time() * 1000)
++
++
++def stock_item(item, country):
++    intervals = [safe_int(v) for v in item.get("intervalHistory", []) if restock.MIN_INTERVAL <= safe_int(v) <= restock.MAX_INTERVAL][-20:]
++    last = safe_int(item.get("lastRestock"))
++    prediction = safe_int(item.get("nextRestock"))
++    estimate = {"kind": "unknown", "reason": "BOSBOT has insufficient recent restock observations"}
++    if len(intervals) >= 2 and prediction > int(time.time()) and last:
++        avg = restock._weighted_avg(intervals)
++        spread = max(60, max(abs(interval - avg) for interval in intervals), int(avg * 0.15))
++        estimate = {"kind": "estimated", "earliest": (prediction - spread) * 1000,
++                    "latest": (prediction + spread) * 1000, "confidence": "medium" if len(intervals) >= 5 else "low",
++                    "samples": len(intervals), "lastSeenRestock": last * 1000, "intervalHistory": [v * 1000 for v in intervals]}
++    at = ms(item.get("observedAt"))
++    fresh = at and -30000 <= int(time.time() * 1000) - at <= 180000
++    return {"itemId": safe_int(item["itemId"]), "name": text(item["name"]), "country": text(country, 60),
++            "cost": safe_int(item.get("cost")) or None, "tornValue": safe_int(item.get("marketValue")) or None,
++            "priceObservedAt": ms(item.get("priceObservedAt")),
++            "stock": max(0, safe_int(item.get("quantity"))) if fresh else None, "observedAt": at, "restock": estimate if fresh else {"kind": "unknown", "reason": "BOSBOT source observation is stale or unavailable"}}
++
++
++def verified_stats(raw):
++    if not isinstance(raw, dict) or raw.get("isFallback") or str(raw.get("source", "")).startswith("BOS level"):
++        return None
++    value = raw.get("estimate")
++    return value if isinstance(value, (int, float)) and math.isfinite(value) and value > 0 else None
++
++
++def map_targets(source, presence):
++    personal = source.get("personalPower") or {}
++    known_power = verified_stats(personal)
++    preferred = [r for r in source.get("recommendedTargets", []) if known_power and verified_stats(r.get("battleStats"))]
++    priority = {safe_int(r.get("tornId")): i for i, r in enumerate(preferred)}
++    rows = list(source.get("targets") or [])
++    rows.sort(key=lambda row: (priority.get(safe_int(row.get("tornId")), len(priority)), not row.get("assigned", False), -safe_int(row.get("recommendationScore"))))
++    at = ms(presence.get("updatedAt")) or ms(source.get("updatedAt")) or 0
++    current = presence.get("targets") or {}
++    result = []
++    for row in rows[:200]:
++        if presence.get("warId") and str(row.get("tornId")) not in current:
++            continue
++        live = current.get(str(row.get("tornId")), row)
++        state = live.get("state") or "Unknown"
++        if state not in {"Okay", "Hospital", "Traveling", "Abroad", "Federal"}:
++            state = "Unknown"
++        stats = verified_stats(row.get("battleStats"))
++        reasons = [text(reason, 200) for reason in live.get("recommendationReasons", [])][:8]
++        if row.get("assigned"):
++            reasons.insert(0, "Assigned to you in BOSBOT War Plan")
++        match = next((r for r in preferred if safe_int(r.get("tornId")) == safe_int(row.get("tornId"))), None)
++        if match and match.get("matchReason"):
++            reasons.insert(0, text(match["matchReason"], 200))
++        if not stats:
++            reasons.append("Battle stats unknown; no level-based strength estimate is used")
++        result.append({"id": safe_int(row["tornId"]), "name": text(row.get("name")), "level": safe_int(row.get("level")) or None,
++                       "status": state, "activity": str(live.get("lastAction", "unknown")).lower() if str(live.get("lastAction", "")).lower() in {"online", "idle", "offline"} else "unknown",
++                       "observedAt": at, "hospitalUntil": ms(live.get("statusUntil")) if state == "Hospital" else None,
++                       "wins": None, "losses": None, "battleStats": stats,
++                       "statsSource": text((row.get("battleStats") or {}).get("source")) if stats else None,
++                       "recommendation": {"score": safe_int(live.get("recommendationScore")), "reasons": reasons[:10],
++                                          "confidence": {"High": "high", "Medium": "medium", "Low": "low"}.get((row.get("battleStats") or {}).get("confidence"), "low") if stats else "low", "label": "BOSBOT recommendation" if row["tornId"] in priority else "BOSBOT availability"}})
++    return result
++
++
++async def snapshot(identity, allowed):
++    result = {"source": "live", "provider": "bosbot", "generatedAt": int(time.time() * 1000), "war": None, "chain": None,
++              "travel": None, "company": None, "player": {"level": None}, "targets": [], "stocks": [], "favorites": [], "issues": {}}
++
++    async def section(key, loader):
++        try:
++            await asyncio.wait_for(loader(), timeout=18)
++        except Exception:
++            # Provider errors may contain credential URLs. Return fixed public messages only.
++            result["issues"][key] = "BOSBOT data is temporarily unavailable"
++
++    async def war():
++        row = await data._cached("targets:current-war-context", 60, data._current_ranked_war)
++        result["war"] = {"active": bool(row and row.get("phase") == "active"), "id": safe_int((row or {}).get("id")) or None, "opponentId": safe_int((row or {}).get("enemyId")) or None, "opponent": text((row or {}).get("enemyName")),
++                         "score": (row or {}).get("score"), "enemyScore": (row or {}).get("enemyScore"), "targetScore": (row or {}).get("targetScore"),
++                         "endsAt": ms((row or {}).get("end")), "observedAt": observed("targets:current-war-context", 60)}
++
++    async def chain():
++        async def load():
++            payload, status = await data.fetch_json("https://api.torn.com/v2/faction/chain", headers={"Authorization": f"ApiKey {data.TORN_API_KEY}"})
++            if status != 200 or not isinstance(payload, dict) or payload.get("error") or not isinstance(payload.get("chain"), dict):
++                raise data.PortalDataError("Chain unavailable")
++            return {"raw": payload["chain"], "at": safe_int(payload.get("timestamp")) or int(time.time())}
++        cached = await data._cached("extension:chain", 10, load)
++        raw, at = cached["raw"], cached["at"]
++        if type(raw.get("current")) is not int or raw["current"] < 0:
++            raise data.PortalDataError("Chain unavailable")
++        count = raw["current"]
++        goal = next((v for v in (10,25,50,100,250,500,1000,2500,5000,10000,25000,50000,100000) if v > count), count + 1)
++        timeout = safe_int(raw.get("timeout"))
++        result["chain"] = {"count": count, "goal": goal, "id": safe_int(raw.get("id")) or None, "startedAt": ms(raw.get("start")),
++                           "expiresAt": (at + timeout) * 1000 if count > 0 and safe_int(raw.get("cooldown")) <= at and 0 < timeout <= 3600 else None, "observedAt": at * 1000}
++
++    async def targets():
++        source, presence = await asyncio.gather(data.targets_data(identity.guild.id, identity.member.id), data.target_status_data())
++        if safe_int((source.get("war") or {}).get("id")) != safe_int(presence.get("warId")):
++            result["issues"]["targets"] = "BOSBOT war changed; waiting for a consistent roster"
++            return
++        result["targets"] = map_targets(source, presence)
++
++    async def stocks():
++        source = await data._cached("restock:all", 60, data._restock_source)
++        result["stocks"] = [stock_item(item, country["name"]) for country in source["countries"] for item in country["items"] if safe_int(item.get("itemId")) > 0][:200]
++        saved, legacy = await asyncio.gather(list_restock_favorites_v2(identity.member.id), data.get_user_restock_favorites(identity.member.id))
++        for favorite in saved[:50]:
++            if not favorite.get("is_active", True):
++                continue
++            for stock in result["stocks"]:
++                if (str(favorite.get("item_id") or "") == str(stock["itemId"]) or str(favorite.get("item_name") or "").casefold() == stock["name"].casefold()) and (not favorite.get("country") or str(favorite.get("country") or "").casefold() in {stock["country"].casefold(), next((c["code"] for c in source["countries"] if c["name"] == stock["country"]), "")}):
++                    result["favorites"].append({"itemId": stock["itemId"], "name": stock["name"], "country": stock["country"], "minimumStock": max(1,min(10000,safe_int(favorite.get("minimum_stock")) or 1)), "alert": bool(favorite.get("is_active", True))})
++                    if favorite.get("country"):
++                        break
++
++        codes = {country["name"]: country["code"] for country in source["countries"]}
++        selected = {(favorite["itemId"], favorite["country"]) for favorite in result["favorites"]}
++        for stock in result["stocks"]:
++            if (codes.get(stock["country"]), stock["name"].casefold()) in legacy and (stock["itemId"], stock["country"]) not in selected:
++                result["favorites"].append({"itemId": stock["itemId"], "name": stock["name"], "country": stock["country"], "minimumStock": 1, "alert": True})
++                selected.add((stock["itemId"], stock["country"]))
++        result["favorites"] = result["favorites"][:50]
++
++    async def personal():
++        own = await personal_data(identity.guild.id, identity.member.id)
++        result["travel"], result["player"] = own["travel"], own["player"]
++        if own.get("issue"):
++            result["issues"]["travel"] = own["issue"]
++
++    async def company():
++        result["company"] = await company_summary(identity.member.id)
++
++    jobs = []
++    for key, loader, permission in (("war",war,allowed.get("war_report")), ("chain",chain,allowed.get("war_report") or allowed.get("faction")),
++                                    ("targets",targets,allowed.get("targets")), ("stocks",stocks,allowed.get("restock")), ("travel",personal,allowed.get("home")), ("company",company,allowed.get("company"))):
++        if permission:
++            jobs.append(section(key, loader))
++        else:
++            result["issues"][key] = "Your BOSBOT account does not have access to this section"
++    await asyncio.gather(*jobs)
++    return result
+diff --git a/dashboard/extension_personal.py b/dashboard/extension_personal.py
+new file mode 100644
+index 0000000..75e49d5
+--- /dev/null
++++ b/dashboard/extension_personal.py
+@@ -0,0 +1,111 @@
++"""Private extension views sourced only from BOSBOT's verified account and caches."""
++import asyncio
++import hashlib
++import time
++from copy import deepcopy
++
++from core.storage import get_raw_key
++from core.utils import safe_int
++from dashboard import data
++from dashboard.connection_storage import portal_account
++from dashboard.storage import user_torn_link
++from monitors import restock
++from services.company import _selection, employee_row
++
++_CACHE = {}
++_LOCKS = {}
++
++
++def country_name(value):
++    value = str(value or '').strip()
++    aliases = {'united arab emirates': 'UAE', 'uae': 'UAE', 'uk': 'United Kingdom'}
++    return aliases.get(value.casefold(), next((v.split(' ', 1)[-1] for v in restock.COUNTRY_NAMES.values() if v.split(' ', 1)[-1].casefold() == value.casefold()), value))
++
++
++def travel_row(status, travel, observed_at):
++    state = str(status.get('state') or 'Unknown')
++    description = str(status.get('description') or '')[:150]
++    if state in {'Unknown', '', 'None'}:
++        return None
++    active = state in {'Traveling', 'Travelling', 'Abroad', 'Returning'}
++    destination = country_name(travel.get('destination'))
++    returning = state == 'Returning' or 'returning' in description.casefold() or (active and destination == 'Torn')
++    described_country = next((v.split(' ', 1)[-1] for v in restock.COUNTRY_NAMES.values() if v.split(' ', 1)[-1].casefold() in description.casefold()), None)
++    if not described_country:
++        described_country = 'UAE' if 'united arab emirates' in description.casefold() else None
++    if not active:
++        destination = 'Torn'
++    elif not destination:
++        destination = 'Torn' if returning else described_country or 'Unknown destination'
++    arrival = safe_int(travel.get('arrival_at'))
++    # Faction status.until is not a reliable flight arrival timestamp.
++    return {'active': active, 'origin': described_country or 'Unknown origin' if returning else 'Torn',
++            'destination': destination, 'arrivesAt': arrival * 1000 if active and state != 'Abroad' and arrival > observed_at else None,
++            'state': state, 'description': description, 'observedAt': observed_at * 1000}
++
++
++async def personal_data(guild_id, user_id):
++    account, key = await asyncio.gather(portal_account(user_id), get_raw_key(user_id))
++    if key and account and account.get('tornConnected'):
++        fingerprint = hashlib.sha256(key.encode()).hexdigest()
++        async with _LOCKS.setdefault(user_id, asyncio.Lock()):
++            now = int(time.time())
++            cached = _CACHE.get(user_id)
++            if cached and cached[0] == fingerprint and now - cached[1] < 20:
++                return deepcopy(cached[2])
++            async def selection(name):
++                payload, code = await data.fetch_json('https://api.torn.com/v2/user/' + name,
++                                                      headers={'Authorization': 'ApiKey ' + key}, timeout=8, retries=0)
++                if code != 200 or not isinstance(payload, dict) or payload.get('error'):
++                    raise data.PortalDataError('Private travel unavailable')
++                return payload.get(name) or {}
++            profile, travel = await asyncio.gather(selection('profile'), selection('travel'))
++            if not safe_int(account.get('torn_id')) or safe_int(profile.get('id')) != safe_int(account.get('torn_id')):
++                raise data.PortalDataError('Private account mismatch')
++            result = {'travel': travel_row(profile.get('status') or {}, travel, now),
++                      'player': {'level': safe_int(profile.get('level')) or None}}
++            if result['travel'] is None:
++                result['issue'] = 'BOSBOT cannot confirm your current travel status'
++            _CACHE[user_id] = (fingerprint, now, deepcopy(result))
++            return result
++    # Members without a personal key can still use the shared faction observation.
++    link = await user_torn_link(guild_id, user_id)
++    members = await data._cached('faction:members', 60, data._faction_members_source) if link else {}
++    member = members.get(safe_int((link or {}).get('torn_id')))
++    if not member:
++        return {'travel': None, 'player': {'level': None}, 'issue': 'Connect your Torn account on BOSBOT for automatic travel detection'}
++    at = int((time.time() - max(0, 60 - (data._CACHE.get('faction:members', (time.monotonic(),))[0] - time.monotonic()))))
++    return {'travel': travel_row(member.get('status') or {}, {}, at), 'player': {'level': safe_int(member.get('level')) or None}}
++
++
++async def company_summary(user_id):
++    account, key = await asyncio.gather(portal_account(user_id), get_raw_key(user_id))
++    unavailable = {'isDirector': False, 'name': '', 'observedAt': None, 'employees': []}
++    if not key or not account or not account.get('tornConnected'):
++        return unavailable
++    fingerprint = hashlib.sha256(key.encode()).hexdigest()
++    cache_id = f'extension:company:{user_id}:{fingerprint}'
++    async def profile_source():
++        payload = await _selection('profile', key)
++        return {'profile': payload.get('company') or payload.get('profile') or {}, 'at': int(time.time())}
++    own = await data._cached(cache_id + ':profile', 60, profile_source)
++    profile = own['profile']
++    if not safe_int(account.get('torn_id')) or safe_int((profile.get('director') or {}).get('id')) != safe_int(account.get('torn_id')) or not safe_int(profile.get('id')):
++        return unavailable
++    async def employee_source():
++        response = await _selection('employees', key)
++        values = response.get('employees') or []
++        if isinstance(values, dict):
++            values = [{**v, 'id': v.get('id', k)} for k, v in values.items() if isinstance(v, dict)]
++        return {'employees': values if isinstance(values, list) else [], 'at': int(time.time())}
++    source = await data._cached(cache_id + ':employees:' + str(profile['id']), 180, employee_source)
++    rows = []
++    for raw in source['employees'][:100]:
++        if not isinstance(raw, dict) or not safe_int(raw.get('id')):
++            continue
++        row = employee_row(raw, source['at'])
++        value = row.get('addictionPenalty')
++        rows.append({'id': safe_int(row['id']), 'name': str(row.get('name') or '')[:80],
++                     'addictionEffect': value if type(value) in (int, float) else None})
++    return {'isDirector': True, 'name': str(profile.get('name') or '')[:100],
++            'observedAt': source['at'] * 1000, 'employees': rows}
+diff --git a/dashboard/extension_storage.py b/dashboard/extension_storage.py
+new file mode 100644
+index 0000000..144be62
+--- /dev/null
++++ b/dashboard/extension_storage.py
+@@ -0,0 +1,108 @@
++"""Read-only extension devices. Only hashes of pairing secrets and tokens are stored."""
++import hashlib
++import secrets
++import time
++
++import aiosqlite
++from core import database
++
++PAIR_TTL = 300
++DEVICE_TTL = 30 * 86400
++SCHEMA = """
++CREATE TABLE IF NOT EXISTS dashboard_extension_pairs (
++ id TEXT PRIMARY KEY, secret_hash TEXT NOT NULL, extension_id TEXT NOT NULL,
++ expires_at INTEGER NOT NULL, guild_id INTEGER, user_id INTEGER, auth_mode TEXT
++);
++CREATE TABLE IF NOT EXISTS dashboard_extension_devices (
++ id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, extension_id TEXT NOT NULL,
++ guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, auth_mode TEXT NOT NULL,
++ created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0
++);
++CREATE INDEX IF NOT EXISTS extension_devices_owner ON dashboard_extension_devices(guild_id, user_id);
++"""
++
++
++def digest(value):
++    return hashlib.sha256(value.encode()).hexdigest()
++
++
++async def start(extension_id):
++    now = int(time.time())
++    pair_id, secret = secrets.token_urlsafe(24), secrets.token_urlsafe(32)
++    async with aiosqlite.connect(database.DB_PATH) as db:
++        await db.execute("DELETE FROM dashboard_extension_pairs WHERE expires_at < ?", (now,))
++        await db.execute("DELETE FROM dashboard_extension_devices WHERE expires_at < ?", (now,))
++        async with db.execute("SELECT COUNT(*) FROM dashboard_extension_pairs") as cur:
++            if (await cur.fetchone())[0] >= 500:
++                raise ValueError("Pairing capacity reached")
++        await db.execute("INSERT INTO dashboard_extension_pairs(id, secret_hash, extension_id, expires_at) VALUES(?,?,?,?)",
++                         (pair_id, digest(secret), extension_id, now + PAIR_TTL))
++        await db.commit()
++    return {"pairingId": pair_id, "pollingSecret": secret, "expiresAt": (now + PAIR_TTL) * 1000}
++
++
++async def pairing(pair_id):
++    async with aiosqlite.connect(database.DB_PATH) as db:
++        db.row_factory = aiosqlite.Row
++        async with db.execute("SELECT * FROM dashboard_extension_pairs WHERE id=? AND expires_at>=?", (pair_id, int(time.time()))) as cur:
++            row = await cur.fetchone()
++    return dict(row) if row else None
++
++
++async def approve(pair_id, identity):
++    async with aiosqlite.connect(database.DB_PATH) as db:
++        cursor = await db.execute("""UPDATE dashboard_extension_pairs SET guild_id=?, user_id=?, auth_mode=?
++            WHERE id=? AND expires_at>=? AND user_id IS NULL""",
++            (identity.guild.id, identity.session.user_id, identity.auth_mode, pair_id, int(time.time())))
++        await db.commit()
++        return cursor.rowcount == 1
++
++
++async def poll(pair_id, secret, extension_id):
++    now = int(time.time())
++    async with aiosqlite.connect(database.DB_PATH) as db:
++        db.row_factory = aiosqlite.Row
++        await db.execute("BEGIN IMMEDIATE")
++        async with db.execute("""SELECT * FROM dashboard_extension_pairs
++            WHERE id=? AND secret_hash=? AND extension_id=? AND expires_at>=?""",
++            (pair_id, digest(secret), extension_id, now)) as cur:
++            row = await cur.fetchone()
++        if not row:
++            return {"status": "expired"}
++        if row["user_id"] is None:
++            return {"status": "pending"}
++        async with db.execute("""SELECT COUNT(*) FROM dashboard_extension_devices
++            WHERE guild_id=? AND user_id=? AND expires_at>=? AND revoked=0""", (row["guild_id"], row["user_id"], now)) as cur:
++            if (await cur.fetchone())[0] >= 10:
++                return {"status": "limit"}
++        token, device_id = secrets.token_urlsafe(48), secrets.token_urlsafe(24)
++        await db.execute("""INSERT INTO dashboard_extension_devices
++            (id,token_hash,extension_id,guild_id,user_id,auth_mode,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)""",
++            (device_id, digest(token), extension_id, row["guild_id"], row["user_id"], row["auth_mode"], now, now + DEVICE_TTL))
++        await db.execute("DELETE FROM dashboard_extension_pairs WHERE id=?", (pair_id,))
++        await db.commit()
++    return {"status": "approved", "token": token, "deviceId": device_id, "expiresAt": (now + DEVICE_TTL) * 1000}
++
++
++async def device(token, extension_id):
++    async with aiosqlite.connect(database.DB_PATH) as db:
++        db.row_factory = aiosqlite.Row
++        async with db.execute("""SELECT * FROM dashboard_extension_devices
++            WHERE token_hash=? AND extension_id=? AND expires_at>=? AND revoked=0""", (digest(token), extension_id, int(time.time()))) as cur:
++            row = await cur.fetchone()
++    return dict(row) if row else None
++
++
++async def devices(identity):
++    async with aiosqlite.connect(database.DB_PATH) as db:
++        db.row_factory = aiosqlite.Row
++        async with db.execute("""SELECT id, extension_id, created_at, expires_at FROM dashboard_extension_devices
++            WHERE guild_id=? AND user_id=? AND revoked=0 AND expires_at>=?""",
++            (identity.guild.id, identity.session.user_id, int(time.time()))) as cur:
++            return [dict(row) for row in await cur.fetchall()]
++
++
++async def revoke(device_id, guild_id, user_id):
++    async with aiosqlite.connect(database.DB_PATH) as db:
++        await db.execute("UPDATE dashboard_extension_devices SET revoked=1 WHERE id=? AND guild_id=? AND user_id=?", (device_id, guild_id, user_id))
++        await db.commit()
+diff --git a/dashboard/static/extension.css b/dashboard/static/extension.css
+new file mode 100644
+index 0000000..a0604f4
+--- /dev/null
++++ b/dashboard/static/extension.css
+@@ -0,0 +1 @@
++:root{color-scheme:dark;font:15px system-ui;color:#dce1e7;background:#13161b}body{margin:0;padding:28px}main{max-width:600px;margin:7vh auto;padding:28px;background:#20242b;border:1px solid #343b45;border-radius:12px}p{line-height:1.6;color:#aeb9c8}a{color:#82c5ff}button{display:block;margin:20px 0;padding:12px 20px;border:1px solid #577da4;border-radius:7px;background:#283f58;color:#fff;cursor:pointer}code{overflow-wrap:anywhere}form{padding:12px 0;border-top:1px solid #343b45}
+diff --git a/tests/test_extension.py b/tests/test_extension.py
+new file mode 100644
+index 0000000..627cd36
+--- /dev/null
++++ b/tests/test_extension.py
+@@ -0,0 +1,310 @@
++import asyncio
++import json
++import os
++import tempfile
++import time
++import unittest
++from pathlib import Path
++from types import SimpleNamespace
++from unittest.mock import AsyncMock, patch
++
++import aiosqlite
++from aiohttp import web
++from aiohttp.test_utils import TestClient, TestServer
++from core import database
++from dashboard import extension_storage as storage, extension_feed as feed, extension_api
++from dashboard.auth import SessionData, DashboardIdentity
++from dashboard.server import api_errors, security_headers
++from dashboard.schema import PORTAL_PAGE_DEFAULTS
++
++EXT_ID = "a" * 32
++
++
++def identity(user_id=22):
++    return DashboardIdentity(SessionData(11, user_id, "test-csrf", int(time.time()) + 3600),
++                             SimpleNamespace(id=11), SimpleNamespace(id=user_id, __str__=lambda s: "Member"), False, False)
++
++
++class ExtensionDeviceTests(unittest.IsolatedAsyncioTestCase):
++    async def asyncSetUp(self):
++        self.tmp = tempfile.TemporaryDirectory()
++        self.old_db = database.DB_PATH
++        database.DB_PATH = os.path.join(self.tmp.name, "test.db")
++        async with aiosqlite.connect(database.DB_PATH) as db:
++            await db.executescript(storage.SCHEMA)
++        self.member = identity()
++        self.portal = SimpleNamespace(public_url="https://bosbot.test", bot=object(),
++                                      _identity=AsyncMock(return_value=self.member), _allowed_pages=AsyncMock(return_value={"restock": True}))
++        self.api = extension_api.ExtensionApi(self.portal)
++        app = web.Application(middlewares=[security_headers, api_errors])
++        self.api.register(app)
++        self.client = TestClient(TestServer(app))
++        await self.client.start_server()
++
++    async def asyncTearDown(self):
++        await self.client.close()
++        database.DB_PATH = self.old_db
++        self.tmp.cleanup()
++
++    async def paired(self):
++        pair = await storage.start(EXT_ID)
++        self.assertTrue(await storage.approve(pair["pairingId"], self.member))
++        return pair, await storage.poll(pair["pairingId"], pair["pollingSecret"], EXT_ID)
++
++    async def test_tokens_hashed_and_single_claim_under_concurrent_poll(self):
++        pair = await storage.start(EXT_ID)
++        self.assertEqual((await storage.poll(pair["pairingId"], pair["pollingSecret"], EXT_ID))["status"], "pending")
++        await storage.approve(pair["pairingId"], self.member)
++        replies = await asyncio.gather(*[storage.poll(pair["pairingId"], pair["pollingSecret"], EXT_ID) for _ in range(4)])
++        self.assertEqual(sum(r["status"] == "approved" for r in replies), 1)
++        approved = next(r for r in replies if r["status"] == "approved")
++        self.assertNotIn(approved["token"].encode(), Path(database.DB_PATH).read_bytes())
++        self.assertIsNotNone(await storage.device(approved["token"], EXT_ID))
++        self.assertIsNone(await storage.device(approved["token"], "b" * 32))
++
++    async def test_wrong_poll_secret_and_extension_cannot_claim(self):
++        pair = await storage.start(EXT_ID)
++        await storage.approve(pair["pairingId"], self.member)
++        self.assertEqual((await storage.poll(pair["pairingId"], "wrong", EXT_ID))["status"], "expired")
++        self.assertEqual((await storage.poll(pair["pairingId"], pair["pollingSecret"], "b" * 32))["status"], "expired")
++        self.assertEqual((await storage.poll(pair["pairingId"], pair["pollingSecret"], EXT_ID))["status"], "approved")
++
++    async def test_expired_pair_and_expired_device_cannot_be_used(self):
++        pair, device = await self.paired()
++        async with aiosqlite.connect(database.DB_PATH) as db:
++            await db.execute("UPDATE dashboard_extension_devices SET expires_at=0")
++            await db.commit()
++        self.assertIsNone(await storage.device(device["token"], EXT_ID))
++        pair = await storage.start(EXT_ID)
++        async with aiosqlite.connect(database.DB_PATH) as db:
++            await db.execute("UPDATE dashboard_extension_pairs SET expires_at=0")
++            await db.commit()
++        self.assertFalse(await storage.approve(pair["pairingId"], self.member))
++
++    async def test_revoke_ownership_and_member_device_limit(self):
++        _, device = await self.paired()
++        await storage.revoke(device["deviceId"], 11, 999)
++        self.assertIsNotNone(await storage.device(device["token"], EXT_ID))
++        await storage.revoke(device["deviceId"], 11, 22)
++        self.assertIsNone(await storage.device(device["token"], EXT_ID))
++        for _ in range(10):
++            await self.paired()
++        pair = await storage.start(EXT_ID)
++        await storage.approve(pair["pairingId"], self.member)
++        self.assertEqual((await storage.poll(pair["pairingId"], pair["pollingSecret"], EXT_ID))["status"], "limit")
++
++    async def test_approve_requires_website_origin_and_csrf(self):
++        pair = await storage.start(EXT_ID)
++        body = {"pairingId": pair["pairingId"], "csrf": "test-csrf"}
++        bad_origin = await self.client.post('/api/extension/pair/approve', data=body, headers={"Origin": "https://evil.test"})
++        self.assertEqual(bad_origin.status, 403)
++        bad_csrf = await self.client.post('/api/extension/pair/approve', data={**body, "csrf": "wrong"}, headers={"Origin": "https://bosbot.test"})
++        self.assertEqual(bad_csrf.status, 403)
++        good = await self.client.post('/api/extension/pair/approve', data=body, headers={"Origin": "https://bosbot.test"})
++        self.assertEqual(good.status, 200)
++        self.assertEqual(good.headers["Cache-Control"], "no-store")
++        self.assertNotIn(pair["pollingSecret"], await good.text())
++        repeat = await self.client.post('/api/extension/pair/approve', data=body, headers={"Origin": "https://bosbot.test"})
++        self.assertEqual(repeat.status, 400)
++
++    async def test_anonymous_feed_and_cross_site_start_denied(self):
++        response = await self.client.get('/api/extension/snapshot', headers={"X-Extension-Id": EXT_ID})
++        self.assertEqual(response.status, 401)
++        response = await self.client.post('/api/extension/pair/start', json={"extensionId": EXT_ID}, headers={"Origin": "https://www.torn.com"})
++        self.assertEqual(response.status, 403)
++        response = await self.client.post('/api/extension/pair/start', json={"extensionId": "bad"})
++        self.assertEqual(response.status, 400)
++
++    async def test_feed_rechecks_permissions_and_disconnect_revokes(self):
++        _, device = await self.paired()
++        headers = {"X-Extension-Id": EXT_ID, "Authorization": "Bearer " + device["token"]}
++        with patch.object(extension_api, 'identity_for_session', AsyncMock(return_value=self.member)) as auth, patch.object(extension_api, 'snapshot', AsyncMock(return_value={"provider": "bosbot"})) as source:
++            response = await self.client.get('/api/extension/snapshot', headers=headers)
++            self.assertEqual(response.status, 200)
++            auth.assert_awaited_once()
++            source.assert_awaited_once_with(self.member, {"restock": True})
++            response = await self.client.delete('/api/extension/device', headers=headers)
++            self.assertEqual(response.status, 200)
++            response = await self.client.get('/api/extension/snapshot', headers=headers)
++            self.assertEqual(response.status, 401)
++        self.assertIsNone(await storage.device(device["token"], EXT_ID))
++
++    async def test_lost_member_access_denied(self):
++        _, device = await self.paired()
++        with patch.object(extension_api, 'identity_for_session', AsyncMock(return_value=None)):
++            response = await self.client.get('/api/extension/snapshot', headers={"X-Extension-Id": EXT_ID, "Authorization": "Bearer " + device["token"]})
++        self.assertEqual(response.status, 403)
++
++    async def test_start_and_poll_route_contract_and_no_secret_in_page(self):
++        response = await self.client.post('/api/extension/pair/start', json={"extensionId": EXT_ID})
++        pair = await response.json()
++        self.assertTrue(pair["verificationUrl"].startswith('https://bosbot.test/extension/connect?'))
++        response = await self.client.get('/extension/connect?pairingId=' + pair["pairingId"])
++        page = await response.text()
++        self.assertIn(EXT_ID, page)
++        self.assertNotIn(pair["pollingSecret"], page)
++        response = await self.client.post('/api/extension/pair/poll', json={"extensionId": EXT_ID, "pairingId": pair["pairingId"], "pollingSecret": pair["pollingSecret"]})
++        self.assertEqual(await response.json(), {"status": "pending"})
++        response = await self.client.post('/api/extension/pair/poll', json={"extensionId": EXT_ID, "pairingId": pair["pairingId"], "pollingSecret": pair["pollingSecret"]})
++        self.assertEqual(response.status, 429)
++
++
++class ExtensionFeedTests(unittest.IsolatedAsyncioTestCase):
++    def test_no_level_stat_fallbacks_and_provider_order(self):
++        now = int(time.time())
++        rows = [{"tornId": 1, "name": "One", "level": 20, "state": "Okay", "recommendationScore": 200, "recommendationReasons": ["Okay"], "battleStats": {"estimate": 8000000, "source": "BOS level model", "isFallback": True}},
++                {"tornId": 2, "name": "Two", "level": 40, "state": "Okay", "recommendationScore": 100, "battleStats": {"estimate": 4000000, "source": "TornStats", "confidence": "High"}}]
++        result = feed.map_targets({"targets": rows, "updatedAt": now}, {})
++        self.assertEqual(result[0]["id"], 1)
++        self.assertIsNone(result[0]["battleStats"])
++        self.assertEqual(result[1]["battleStats"], 4000000)
++        self.assertIn('unknown', result[0]["recommendation"]["reasons"][-1])
++        presence = {"updatedAt": now, "targets": {"1": {"state": "Hospital", "statusUntil": now + 120, "recommendationScore": 0}}}
++        result = feed.map_targets({"targets": rows}, presence)
++        self.assertEqual(result[0]["status"], "Hospital")
++        self.assertEqual(result[0]["hospitalUntil"], (now + 120) * 1000)
++
++    def test_restock_estimated_windows_real_observation_time_and_stale_stock(self):
++        now = int(time.time())
++        item = {"itemId": 206, "name": "Xanax", "quantity": 20, "observedAt": now - 20, "lastRestock": now - 400, "nextRestock": now + 200, "intervalHistory": [600, 610, 2, 99999]}
++        result = feed.stock_item(item, 'Switzerland')
++        self.assertEqual(result["stock"], 20)
++        self.assertEqual(result["observedAt"], (now - 20) * 1000)
++        self.assertEqual(result["restock"]["kind"], 'estimated')
++        self.assertEqual(result["restock"]["intervalHistory"], [600000, 610000])
++        result = feed.stock_item({**item, "observedAt": now - 200}, 'Switzerland')
++        self.assertIsNone(result["stock"])
++        result = feed.stock_item({**item, "nextRestock": now - 1}, 'Switzerland')
++        self.assertEqual(result["restock"]["kind"], 'unknown')
++
++    async def test_denied_sections_do_not_fetch_providers(self):
++        with patch.object(feed.data, 'fetch_json', AsyncMock()) as fetch:
++            result = await feed.snapshot(identity(), {})
++        fetch.assert_not_awaited()
++        self.assertIsNone(result["war"])
++        self.assertIsNone(result["chain"])
++        self.assertEqual(result["targets"], [])
++        self.assertEqual(len(result["issues"]), 6)
++
++    async def test_provider_failure_is_unknown_and_never_exposes_credentials(self):
++        async def fail(*args):
++            raise RuntimeError('secret-key-url')
++        with patch.object(feed.data, '_cached', fail):
++            result = await feed.snapshot(identity(), {"war_report": True, "faction": True, "targets": True, "restock": True})
++        self.assertNotIn('secret-key-url', json.dumps(result))
++        self.assertEqual(result["provider"], 'bosbot')
++        self.assertIsNone(result["war"])
++        self.assertIsNone(result["chain"])
++        self.assertEqual(result["stocks"], [])
++
++    async def test_chain_cache_single_flight_and_timeout_uses_source_timestamp(self):
++        feed.data._CACHE.pop('extension:chain', None)
++        now = int(time.time())
++        try:
++            with patch.object(feed.data, 'fetch_json', AsyncMock(return_value=({"timestamp": now - 5, "chain": {"current": 49, "timeout": 120}}, 200))) as fetch:
++                first, second = await asyncio.gather(feed.snapshot(identity(), {"faction": True}), feed.snapshot(identity(23), {"faction": True}))
++            fetch.assert_awaited_once()
++            self.assertEqual(first["chain"], second["chain"])
++            self.assertEqual(first["chain"]["goal"], 50)
++            self.assertEqual(first["chain"]["expiresAt"], (now - 5 + 120) * 1000)
++        finally:
++            feed.data._CACHE.pop('extension:chain', None)
++
++    async def test_restock_portal_reuses_current_monitor_observation(self):
++        now = int(time.time())
++        payload = {"swi": {"update": now, "stocks": [{"id": 206, "name": "Xanax", "quantity": 50, "cost": 10}]}}
++        with (patch.object(feed.restock, '_stock_snapshot', payload), patch.object(feed.restock, '_stock_snapshot_at', time.time()),
++              patch.object(feed.restock, '_refresh_mv', AsyncMock()), patch.object(feed.data, 'get_all_restock_items', AsyncMock(return_value={})),
++              patch.object(feed.data, 'YATA_API_KEY', 'TEST_ONLY'), patch.object(feed.data, 'fetch_json', AsyncMock()) as fetch):
++            result = await feed.data._restock_source()
++        fetch.assert_not_awaited()
++        item = next(i for c in result['countries'] for i in c['items'] if i['itemId'] == 206)
++        self.assertEqual(item['observedAt'], now)
++        self.assertEqual(item['quantity'], 50)
++
++    async def test_complete_provider_contract_and_account_specific_travel_favorites(self):
++        now = int(time.time())
++        source = {"updatedAt": now, "war": {"id": 5}, "targets": [
++            {"tornId": 123, "name": "Fixture enemy", "level": 30, "battleStats": {"source": "BOS level model", "isFallback": True, "estimate": 10000000}, "state": "Okay", "recommendationScore": 200, "recommendationReasons": ["Currently attackable"]}
++        ]}
++        presence = {"warId": 5, "updatedAt": now, "targets": {"123": {"state": "Okay", "lastAction": "Online", "recommendationScore": 125, "recommendationReasons": ["Currently attackable"]}}}
++        cached = {
++            'targets:current-war-context': {"id": 5, "phase": "active", "enemyName": "Fixture enemy faction", "score": 500, "enemyScore": 400, "targetScore": 1000, "end": 0},
++            'extension:chain': {"raw": {"current": 49, "timeout": None}, "at": now},
++            'restock:all': {"countries": [{"code": "swi", "name": "Switzerland", "items": [{"itemId": 206, "name": "Xanax", "quantity": 50, "cost": 100, "marketValue": 160, "priceObservedAt": now, "observedAt": now, "lastRestock": now-400, "nextRestock": now+200, "intervalHistory": [600, 610]}]}, {"code": "mex", "name": "Mexico", "items": [{"itemId": 258, "name": "Jaguar Plushie", "quantity": 5, "observedAt": now}]}]},
++            'faction:members': {456: {"level": 40, "status": {"state": "Traveling", "description": "Traveling to Japan", "until": now+600}}},
++        }
++        async def cache(key, ttl, loader):
++            return cached[key]
++        with (patch.object(feed.data, '_cached', cache), patch.object(feed.data, 'targets_data', AsyncMock(return_value=source)),
++              patch.object(feed.data, 'target_status_data', AsyncMock(return_value=presence)),
++              patch.object(feed, 'personal_data', AsyncMock(return_value={"travel": {"active": True, "origin": "Torn", "destination": "Japan", "arrivesAt": (now+600)*1000, "state": "Traveling", "description": "Traveling to Japan", "observedAt": now*1000}, "player": {"level": 40}})),
++              patch.object(feed, 'company_summary', AsyncMock(return_value={"isDirector": False, "name": "", "observedAt": None, "employees": []})),
++              patch.object(feed.data, 'get_user_restock_favorites', AsyncMock(return_value={("mex", "jaguar plushie"), ("swi", "xanax")})) as legacy,
++              patch.object(feed, 'list_restock_favorites_v2', AsyncMock(return_value=[{"item_id": 206, "item_name": "Xanax", "country": "swi", "minimum_stock": 7, "is_active": True}])) as favorites):
++            result = await feed.snapshot(identity(), PORTAL_PAGE_DEFAULTS)
++        favorites.assert_awaited_once_with(22)
++        legacy.assert_awaited_once_with(22)
++        self.assertEqual(len(result['favorites']), 2)
++        self.assertEqual(result['favorites'][1]['name'], 'Jaguar Plushie')
++        self.assertEqual(result['issues'], {})
++        self.assertTrue(result['war']['active'])
++        self.assertFalse(PORTAL_PAGE_DEFAULTS['war_plan'])
++        self.assertIsNone(result['targets'][0]['battleStats'])
++        self.assertIsNone(result['chain']['expiresAt'])
++        self.assertEqual(result['travel']['destination'], 'Japan')
++        self.assertEqual(result['favorites'][0]['minimumStock'], 7)
++        self.assertEqual(result['stocks'][0]['restock']['kind'], 'estimated')
++        if os.getenv('BOSBOT_CONTRACT_FIXTURE'):
++            Path(os.environ['BOSBOT_CONTRACT_FIXTURE']).write_text(json.dumps(result, indent=2) + '\n')
++
++class ExtensionPrivateViewTests(unittest.IsolatedAsyncioTestCase):
++    async def asyncSetUp(self):
++        from dashboard import extension_personal as own
++        self.own = own
++        own._CACHE.clear()
++        feed.data._CACHE.clear()
++
++    def test_countries_flight_and_returning_no_fabricated_arrival(self):
++        now = int(time.time())
++        self.assertIsNone(self.own.travel_row({}, {}, now))
++        row = self.own.travel_row({'state': 'Traveling', 'description': 'Traveling to United Arab Emirates', 'until': now+30}, {}, now)
++        self.assertEqual(row['destination'], 'UAE')
++        self.assertIsNone(row['arrivesAt'])
++        row = self.own.travel_row({'state': 'Traveling', 'description': 'Returning to Torn from Japan'}, {'destination': 'Torn', 'arrival_at': now+300}, now)
++        self.assertEqual(row['origin'], 'Japan')
++        self.assertEqual(row['destination'], 'Torn')
++        self.assertEqual(row['arrivesAt'], (now+300)*1000)
++        self.assertFalse(self.own.travel_row({'state': 'Okay'}, {'destination': 'Japan', 'arrival_at': now-1}, now)['active'])
++
++    async def test_personal_api_identity_cache_and_country(self):
++        now = int(time.time())
++        async def fetch(url, **kwargs):
++            if url.endswith('/profile'):
++                return {'profile': {'id': 456, 'level': 40, 'status': {'state': 'Traveling', 'description': 'Traveling to UAE'}}}, 200
++            return {'travel': {'destination': 'UAE', 'arrival_at': now+600, 'time_left': 600}}, 200
++        with (patch.object(self.own, 'get_raw_key', AsyncMock(return_value='test-private-key')), patch.object(self.own, 'portal_account', AsyncMock(return_value={'tornConnected': True, 'torn_id': 456})), patch.object(feed.data, 'fetch_json', AsyncMock(side_effect=fetch)) as api):
++            first, second = await asyncio.gather(self.own.personal_data(11,22), self.own.personal_data(11,22))
++            self.assertEqual(api.await_count, 2)
++            self.assertEqual(first, second)
++            self.assertEqual(first['travel']['destination'], 'UAE')
++            self.assertNotIn('test-private-key', json.dumps(first))
++            self.own._CACHE.clear()
++            with patch.object(self.own, 'portal_account', AsyncMock(return_value={'tornConnected': True, 'torn_id': 999})):
++                with self.assertRaises(feed.data.PortalDataError):
++                    await self.own.personal_data(11,22)
++
++    async def test_non_director_never_fetches_or_exports_employee_addiction(self):
++        with (patch.object(self.own, 'get_raw_key', AsyncMock(return_value='TEST_KEY')), patch.object(self.own, 'portal_account', AsyncMock(return_value={'tornConnected': True, 'torn_id': 456})), patch.object(self.own, '_selection', AsyncMock(return_value={'company': {'id': 5, 'director': {'id': 999}}})) as api):
++            result = await self.own.company_summary(22)
++        api.assert_awaited_once_with('profile', 'TEST_KEY')
++        self.assertFalse(result['isDirector'])
++        self.assertEqual(result['employees'], [])
++
++    async def test_director_addiction_is_effectiveness_penalty_unknown_preserved(self):
++        async def selection(name, key):
++            return {'company': {'id': 5, 'name': 'Fixture Co', 'director': {'id': 456}}} if name == 'profile' else {'employees': [{'id': 1, 'name': 'A', 'effectiveness': {'addiction': -8}}, {'id': 2, 'name': 'B'}]}
++        with (patch.object(self.own, 'get_raw_key', AsyncMock(return_value='TEST_KEY')), patch.object(self.own, 'portal_account', AsyncMock(return_value={'tornConnected': True, 'torn_id': 456})), patch.object(self.own, '_selection', AsyncMock(side_effect=selection))):
++            result = await self.own.company_summary(22)
++        self.assertTrue(result['isDirector'])
++        self.assertEqual([e['addictionEffect'] for e in result['employees']], [-8, None])
+diff --git a/docs/browser-extension-integration.md b/docs/browser-extension-integration.md
+new file mode 100644
+index 0000000..3934de5
+--- /dev/null
++++ b/docs/browser-extension-integration.md
+@@ -0,0 +1,31 @@
++# Torn Companion / BOSBOT 0.24.6
++
++The extension reads existing BOSBOT data. Provider keys, Discord credentials and site session cookies are never exported. Each browser must be explicitly approved by a logged-in account. Page permissions and account access are rechecked on every read, including after role changes. Members share the same observations; recommendations, favorites and travel are scoped to their account. No paid/admin-only extension gate is added.
++
++## Protocol
++
++1. Worker POST `/api/extension/pair/start` with its Chrome extension ID. Response: pairingId, pollingSecret, expiresAt (ms), verificationUrl. Five-minute lifetime; browser compares its ID on the approval page.
++2. User logs into the existing BOSBOT site and approves `/extension/connect?pairingId=...`. Approval POST checks exact site Origin, CSRF form token and current account. The polling secret is absent from the page.
++3. Worker POST `/api/extension/pair/poll` every two seconds. Approval is claimed once in a SQLite immediate transaction; only hashed device/poll secrets are stored. The returned token remains in trusted extension-local storage for up to 30 days. Ten active devices per account.
++4. Worker GET `/api/extension/snapshot` with Authorization Bearer and X-Extension-Id. No Torn key required, no arbitrary URL or account ID accepted. Redirects/cookie forwarding are disabled in the client. Extension Origin, if present, must match the bound ID.
++5. DELETE `/api/extension/device` revokes the current device. Signed-in users can also revoke their browsers at `/extension/devices`; form Origin/CSRF checks apply. A site logout does not silently revoke separately approved devices.
++
++Site CORS/CSRF/CSP remain unchanged. Chrome host permission permits the worker to fetch; the Torn content script never fetches or holds credentials. Device reads, starts and polls are bounded/rate-limited. Public errors do not echo provider URLs or exceptions.
++
++## Data fidelity
++
++* War uses the portal's shared 60-second ranked-war cache and includes own/enemy score and lead target. Unknown scores/end times remain null.
++* Target source uses the existing personal BOSBOT ranking/assignments and shared 20-second live status. Missing members and mismatched war rosters are withheld. Real recorded provider estimates may be displayed with source/confidence; BOS level-model fallbacks are withheld. No strength-based recommendation is inferred from a fallback in the extension feed.
++* Hospital timers are enemy target statuses from the same current roster. Travel uses the paired BOSBOT account's verified private user/profile + user/travel cache (20 seconds). Without a personal key, a linked faction observation is used; faction status.until is never treated as a flight arrival time.
++* Chain uses one shared 10-second central request with single-flight protection. Missing timeout stays null; relative timeout is anchored to the provider timestamp.
++* Restock reuses the monitor's latest YATA payload when available, plus persistent interval history. Stale/out-of-order quantities become unknown. Predictions use the existing last-20, 5min–3h, weighted interval model; they are estimated windows, never exact schedules.
++* Legacy starred item favorites and enhanced item favorites can both be imported from the paired account. Import/local edits do not mutate Discord subscriptions. Country/category subscription types are not converted into item favorites.
++
++* All supported stock items include Cost, Torn value and separate market-value observation time. Unknown prices remain null; Chrome filters and calculates gross profit from this feed.
++* Company profile is checked against the verified account's Torn director ID every 60 seconds before fetching/exporting employees (180-second shared private cache). Only addiction effectiveness penalties are exported; not raw addiction points, wages or working stats.
++
++## Deployment and rollback
++
++The prepared release bundle contains source/assets/tests only, excluding .env, encryption.key and production data. Its SHA256 and verified 0.24.5 source baseline are pinned in the dedicated installer. The installer requires interactive sudo, creates a SQLite backup and retains the previous `/opt/bosbot/current` symlink, then starts 0.24.6 and checks health, schema, static assets and anonymous endpoint guards. Failure restores previous code. New extension tables are additive; retained data can remain during code rollback. The Git checkout is not pulled or published by this staged installer; the bundle records its verified base commit and source hashes.
++
++After activation, verify `/healthz` reports 0.24.6 Beta, anonymous snapshot reads return 401, and pairing opens the site's approval page. Install/reload extension 0.3.0, approve an account and compare active war/travel/stock values with BOSBOT. Repeat with a regular member and verify missing page access and revocation. Unit/Chromium fixtures cannot replace real member/provider acceptance.

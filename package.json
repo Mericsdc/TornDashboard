@@ -1,0 +1,19 @@
+{
+  "name": "torndashboard",
+  "version": "0.3.1",
+  "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "setup": "npm ci --prefix development",
+    "update": "npm run check --prefix development",
+    "build": "npm run build --prefix development",
+    "check": "npm run check --prefix development",
+    "package": "npm run package --prefix development",
+    "test:e2e": "npm run test:e2e --prefix development",
+    "version:set": "npm run version:set --prefix development --",
+    "dev:extension": "npm run dev:extension --prefix development",
+    "preview": "npm run preview --prefix development"
+  }
+}

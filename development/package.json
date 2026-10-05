@@ -1,0 +1,56 @@
+{
+  "name": "torndashboard-development",
+  "version": "0.3.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "concurrently -k -n extension,backend \"node scripts/build.mjs --watch\" \"tsx watch packages/backend/src/server.ts\"",
+    "dev:extension": "node scripts/build.mjs --watch",
+    "dev:backend": "tsx watch packages/backend/src/server.ts",
+    "start": "node dist/backend/server.js",
+    "preview": "node scripts/preview.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "npm run build && playwright test",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "db:migrate": "tsx packages/backend/src/migrate.ts",
+    "package": "npm run build && node scripts/package.mjs",
+    "version:set": "node scripts/version.mjs"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.0.0",
+    "@fastify/rate-limit": "^10.3.0",
+    "@fastify/websocket": "^11.2.0",
+    "fastify": "^5.6.0",
+    "pg": "^8.16.0",
+    "redis": "^5.8.0",
+    "sortablejs": "^1.15.6",
+    "ws": "^8.18.3",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@playwright/test": "^1.55.0",
+    "@types/chrome": "^0.1.12",
+    "@types/node": "^24.5.0",
+    "@types/pg": "^8.15.0",
+    "@types/sortablejs": "^1.15.8",
+    "@types/ws": "^8.18.1",
+    "concurrently": "^9.2.1",
+    "esbuild": "^0.28.2",
+    "eslint": "^9.36.0",
+    "globals": "^16.4.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.44.0",
+    "vitest": "^5.0.3"
+  }
+}
