@@ -30,6 +30,8 @@ Previously, refresh failure cleared the snapshot, the center dock expired after 
 
 Stale or conflicting phase observations cannot regress a return to Abroad or switch an active trip's country. A matching cached API response may enrich departure/method/arrival fields without overwriting a newer page phase. Known flight deadlines are preserved when a sleeping or stale DOM countdown returns. A new outbound departure after the previous return's known arrival proves a new trip; the previous ledger is archived, with incomplete evidence marked if final logs were unavailable.
 
+An unconfirmed return intent can be rolled back by a new ground observation from the API after stabilization (for example a cancelled confirmation); the same session and foreign context remain intact. Confirmed flight routes never regress from late shop responses.
+
 The market country remains the last foreign country through RETURNING and LANDED. Completion clears temporary context only after saving history. A foreign shop response from another country cannot update the active market.
 
 ## Purchases and inventory
@@ -82,7 +84,7 @@ Quality states support loading, fresh, cached, stale and errors with/without cac
 - Inventory is server-cached for one hour. Pure inventory additions cannot distinguish shopping, gifts and transfers.
 - Torn has no exact foreign stock/restock schedule in this API. YATA stock is community-observed; stock at landing cannot be guaranteed.
 - Exact capacity is not provided by `/user/travel`. Cached/inferred/manual totals remain labelled until a shop counter is observed.
-- Market value is an estimate before selling fees and travel costs, not guaranteed sale revenue. Generic sales of fungible items cannot reliably identify which trip's units were sold alongside pre-owned stock. **This release does not automatically attribute actual sales.** Actual profit remains null; it is never silently replaced with the estimate.
+- Market value applies to purchased quantities and assumes they remain available for resale; later consumption/transfers can reduce the bag contents. It is an estimate before selling fees and travel costs, not guaranteed sale revenue. Generic sales of fungible items cannot reliably identify which trip's units were sold alongside pre-owned stock. **This release does not automatically attribute actual sales.** Actual profit remains null; it is never silently replaced with the estimate.
 - Resource projections require supported regeneration data and assume no intervening consumption/boosts. Sleeping/closed Chrome can delay notifications.
 - Tests use controlled external responses inside a real unpacked MV3 extension. The user's authenticated Torn account, current Torn shop response variants and physical speaker/OS notification delivery still require the checklist below. No personal key was requested or used.
 

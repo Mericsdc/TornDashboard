@@ -73,8 +73,13 @@ export function observeTravel(app: TravelApp, observation: TravelObservation, no
       if (o.departedAt) { prior.departedAt = o.departedAt; if (app.travelSession) { if (o.state === 'RETURNING') app.travelSession.inbound.departedAt = o.departedAt; else if(o.state === 'OUTBOUND') app.travelSession.outbound.departedAt = o.departedAt; } }
       if (o.arrivalAt) { prior.arrivalAt = o.arrivalAt; if(app.travelSession && o.state === 'RETURNING') app.travelSession.inbound.arrivesAt=o.arrivalAt; }
       if (o.method) prior.method=o.method;
+      if(o.state==='RETURNING'&&o.departedAt)prior.pendingReturn=false;
     }
     return;
+  }
+  if(prior.pendingReturn && !prior.arrivalAt && o.state==='ABROAD' && o.source==='api' && o.at-prior.phaseObservedAt>=45000 && dest===app.travelSession?.country){
+    // A fresh API observation can cancel an unconfirmed return intent (cancelled confirmation or failed departure).
+    app.travelSession!.inbound={departedAt:null,arrivesAt:null,arrivedAt:null};app.travelSession!.inventoryAtDeparture=null;prior.pendingReturn=false;
   }
   if (app.travelSession?.inbound.departedAt && ['OUTBOUND','ABROAD'].includes(o.state) && (!o.departedAt || o.departedAt <= app.travelSession.inbound.departedAt)) return;
   if (o.source === 'api' && prior.pendingReturn && o.state === 'ABROAD' && now - prior.phaseObservedAt < 45000) return;

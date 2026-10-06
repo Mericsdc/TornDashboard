@@ -29,6 +29,10 @@ describe('persistent travel phases and trip lifecycle',()=>{
     observeTravel(app,{state:'OUTBOUND',destinationCountry:'UAE',departedAt:now-3*3600000,at:now+50000,source:'api'},now+50000);expect(app.travel.state).toBe('RETURNING');
     applyPageTravel(app,{state:'ABROAD',destinationCountry:'UAE'},[],now+60000);expect(app.travel.state).toBe('RETURNING');
   });
+  it('allows fresh ground evidence to cancel an unconfirmed return without losing the trip',()=>{
+    const app=trip();applyPageTravel(app,{returnIntent:true},[],now+1000);const id=app.travelSession!.tripId;observeTravel(app,{state:'ABROAD',destinationCountry:'UAE',source:'api',at:now+2000},now+2000);expect(app.travel.state).toBe('RETURNING');
+    observeTravel(app,{state:'ABROAD',destinationCountry:'UAE',source:'api',at:now+61000},now+61000);expect(app.travel.state).toBe('ABROAD');expect(app.travelSession?.inbound.departedAt).toBeNull();expect(app.travelSession?.tripId).toBe(id);expect(app.travel.marketContextCountry).toBe('UAE');
+  });
   it('does not extend a known arrival or restart a landed timer from a stale page countdown',()=>{
     const app=trip();applyPageTravel(app,{returnIntent:true},[],now+1000);observeTravel(app,{state:'RETURNING',originCountry:'UAE',destinationCountry:'Torn',departedAt:now+1000,arrivalAt:now+5000,source:'api',at:now+2000},now+2000);
     finalizeDerived(app,now+6000);applyPageTravel(app,{state:'RETURNING',originCountry:'UAE',destinationCountry:'Torn',arrivalAt:now+3600000},[],now+6000);expect(app.travel.state).toBe('LANDED');expect(app.travel.arrivalAt).toBe(now+5000);expect(app.travelSession?.inbound.arrivesAt).toBe(now+5000);
