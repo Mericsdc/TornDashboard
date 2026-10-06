@@ -1,212 +1,133 @@
-import { test, expect, chromium } from '@playwright/test';
+import { test, expect, chromium, type BrowserContext } from '@playwright/test';
 import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { defaultState, type PublicState } from '@tcd/shared';
+const TEST_KEY='TESTONLYKEY12345';
+const fixture=async()=> (await readFile('packages/extension/demo/index.html','utf8')).replace('<script type="module" src="demo.js"></script>','').replace('<span class="plane">✈</span>','<span class="plane">✈</span><p>Dubai to Torn. Remaining Flight Time - 01:10:43</p>');
+const launch=(profile:string)=>chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,viewport:{width:1680,height:1080},args:[`--disable-extensions-except=${resolve('..')}`,`--load-extension=${resolve('..')}`]});
+async function mockTorn(context:BrowserContext,state:{travel:boolean;director?:boolean;chainTimeout?:number}){
+  const calls:string[]=[];
+  await context.route('https://www.torn.com/**',async route=>route.fulfill({body:await fixture(),contentType:'text/html'}));
+  const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');
+  await worker.evaluate(state=>{
+    const testGlobal=globalThis as unknown as {fixtureCalls:string[];fetch:typeof fetch};testGlobal.fixtureCalls=[];
+    const nativeFetch=globalThis.fetch.bind(globalThis);
+    testGlobal.fetch=async(input,options)=>{
+    const url=new URL(String(input)),now=Math.floor(Date.now()/1000);
+    if(url.protocol==='chrome-extension:')return nativeFetch(input,options);
+    if(url.hostname==='yata.yt'){
+      if(new Headers(options?.headers).has('authorization'))throw new Error('Key leaked to stock provider');
+      return new Response(JSON.stringify({stocks:{uae:{update:now,stocks:[{id:1,quantity:50},{id:2,quantity:0},{id:3,quantity:1000}]},swi:{update:now,stocks:[{id:3,quantity:100}]},jap:{update:now,stocks:[{id:4,quantity:10}]}}}));
+    }
+    if(url.hostname!=='api.torn.com'||new Headers(options?.headers).get('authorization')!=='ApiKey TESTONLYKEY12345')throw new Error('Unexpected API request');
+    const path=url.pathname.replace('/v2/','');testGlobal.fixtureCalls.push(path);
+    const payloads:Record<string,unknown>={
+      'key/info':{info:{user:{id:55,faction_id:10,company_id:state.director?88:null},access:{level:1,type:'Minimal'},selections:{}}},
+      'user/profile':{profile:{id:55,name:'Fixture player',level:40,status:{state:state.travel?'Traveling':'Okay',description:state.travel?'Traveling to Torn':'Okay'}}},
+      'user/travel':{travel:{destination:'Torn',departed_at:now-100,arrival_at:now+500,time_left:500}},
+      'faction/chain':{chain:{id:42,current:49,max:49,timeout:state.chainTimeout??120,start:now-500,end:0}},
+      'faction/wars':{wars:{ranked:{war_id:8,start:now-10000,end:null,winner:null,target:1000,factions:[{id:10,name:'Our faction',score:450},{id:20,name:'Actual opponent',score:200}]}}},
+      'faction/20/members':{members:[{id:123,name:'Opponent A',level:20,status:{state:'Okay',description:'Okay',until:null},last_action:{status:'Offline'}},{id:124,name:'Opponent hospital',level:30,status:{state:'Hospital',description:'Hospital',until:now+120},last_action:{status:'Online'}}]},
+      'torn/items':{items:[{id:1,name:'Camel Plushie',value:{market_price:3000,shops:[{country:'UAE',buy_price:100}]}},{id:2,name:'Tribulus Omanense',value:{market_price:2000,shops:[{country:'UAE',buy_price:500}]}},{id:3,name:'Xanax',value:{market_price:900000,shops:[{country:'Switzerland',buy_price:840000}]}},{id:4,name:'Monkey Plushie',value:{market_price:40000,shops:[{country:'Japan',buy_price:10000}]}}]},
+      'company/profile':{profile:{name:'Director company',director:{id:55}}},'company/employees':{employees:[{id:99,name:'Employee A',effectiveness:{addiction:-8}}]}
+    };
+    return new Response(JSON.stringify(payloads[path]||{error:{code:16}}));
+    };
+  },state);
+  void calls;
+  return worker;
+}
 
-test('preview recovers after SPA replacement and falls back below content on narrow screens', async ({ page }) => {
-  await page.goto('/'); const host = page.locator('#tcd-dashboard');
-  await expect(host).toHaveAttribute('data-placement', 'gutters');
-  await expect(host.locator('.panel')).toHaveCount(2);
-  await page.getByRole('button', { name: 'Simulate SPA navigation' }).click();
-  await expect(host).toHaveCount(1); await expect(host.locator('.widget-card')).toHaveCount(6);
-  await page.setViewportSize({ width: 760, height: 900 }); await expect(host).toHaveAttribute('data-placement', 'inline');
-  const main = await page.locator('main').boundingBox(); const dashboard = await host.boundingBox();
-  expect(dashboard!.y).toBeGreaterThanOrEqual(main!.y + main!.height);
-  await page.setViewportSize({ width: 1920, height: 1080 }); await expect(host).toHaveAttribute('data-placement', 'gutters');
-  await host.getByLabel('Panel settings').click(); await host.getByLabel('theme', { exact: true }).selectOption('slate');
-  await expect(host.locator('.dashboard')).toHaveAttribute('data-theme', 'slate');
-  await page.reload(); await expect(host.locator('.dashboard')).toHaveAttribute('data-theme', 'slate');
+async function isolatedContext(context:BrowserContext,page:import('@playwright/test').Page){const cdp=await context.newCDPSession(page);let isolated=0;cdp.on('Runtime.executionContextCreated',event=>{if(event.context.auxData?.type==='isolated'&&!event.context.name.startsWith('__playwright'))isolated=event.context.id;});await cdp.send('Runtime.enable');await expect.poll(()=>isolated).toBeGreaterThan(0);return{cdp,isolated};}
+
+test('responsive preview, explicit save, separated arrangement and SPA dock recovery',async({page})=>{
+  await page.goto('/');const host=page.locator('#tcd-dashboard');await expect(host).toHaveAttribute('data-placement','gutters');await expect(host.locator('.widget-card')).toHaveCount(2);
+  await host.getByLabel('Panel settings').click();await host.getByLabel('Width',{exact:true}).fill('340');await host.getByLabel('density',{exact:true}).selectOption('comfortable');await host.getByLabel('theme',{exact:true}).selectOption('slate');
+  await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','liquid-glass');await host.getByRole('button',{name:'Save settings',exact:true}).click();await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
+  await page.setViewportSize({width:1680,height:1080});await expect(host).toHaveAttribute('data-placement','gutters');await expect(host.getByLabel('Drag Chain',{exact:true})).toBeHidden();
+  const box=await host.locator('.panel[data-side="left"]').boundingBox();expect(box!.width).toBeLessThan(340);expect(box!.y).toBeLessThan(200);
+  await host.getByLabel('Arrange widgets',{exact:true}).click();await expect(host.getByLabel('Drag Chain',{exact:true})).toBeVisible();await host.getByLabel('Arrange widgets',{exact:true}).click();
+  await page.reload();await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
+  await page.getByRole('button',{name:'Simulate SPA navigation'}).click();await expect(host).toHaveCount(1);await expect(host.getByLabel('Dashboard preset')).toHaveValue('TRAVEL');await expect(host.locator('[data-widget-id="chain"]')).toHaveCount(0);
+  const dock=page.locator('#tcd-travel-dock');await expect(dock).toHaveCount(1);await expect(dock).toBeVisible();await expect(dock.locator('.widget-card')).toHaveCount(2);await expect(page.locator('main #tcd-travel-dock')).toHaveCount(1);
+  await page.setViewportSize({width:760,height:900});await expect(host).toHaveAttribute('data-placement','inline');const main=await page.locator('main').boundingBox(),dashboard=await host.boundingBox();expect(dashboard!.y).toBeLessThan(main!.y);
 });
 
-test('updating the installed folder retains extension identity, BOSBOT pairing and user preferences', async ({ browserName }) => {
-  expect(browserName).toBe('chromium');
-  const extensionPath = resolve('..');
-  const profile = await mkdtemp(join(tmpdir(), 'torndashboard-update-profile-'));
-  const launch = () => chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true, args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`] });
-  const staging = await mkdtemp(join(tmpdir(), 'torndashboard-update-e2e-'));
-  const scriptUrl = new URL('../../scripts/extension-runtime.mjs', import.meta.url).href;
-  const { readRuntime, promoteExtension } = await import(/* @vite-ignore */ scriptUrl);
-  const original = await readRuntime(extensionPath);
-  let context = await launch();
-  try {
-    let worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
-    const id = new URL(worker.url()).hostname;
-    const state = defaultState(); state.settings.theme = 'slate'; state.settings.gap = 14;
-    const bosbotDevice = { origin: 'http://127.0.0.1:4318', token: 'TEST_ONLY_UPDATE_DEVICE_TOKEN_000000000000', deviceId: 'test_update_device_000000000000', expiresAt: Date.now() + 86400000 };
-    await worker.evaluate(async data => { await chrome.storage.local.set(data); }, { state, bosbotDevice, bosbotOnlyV3: true });
-    await context.close();
-    for (const [name, contents] of original.files) await writeFile(join(staging, name), contents);
-    const parts = original.manifest.version.split('.').map(Number);
-    const updatedManifest = { ...original.manifest, version: `${parts[0]}.${parts[1]}.${parts[2] + 1}` };
-    await writeFile(join(staging, 'manifest.json'), JSON.stringify(updatedManifest));
-    await promoteExtension(staging, extensionPath);
-    context = await launch(); worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
-    expect(new URL(worker.url()).hostname).toBe(id);
-    expect(await worker.evaluate(() => chrome.runtime.getManifest().name)).toBe('TornDashboard');
-    expect(await worker.evaluate(() => chrome.runtime.getManifest().version)).toBe(updatedManifest.version);
-    const retained = await worker.evaluate(async () => chrome.storage.local.get<{ state: PublicState; bosbotDevice: unknown }>(['state', 'bosbotDevice']));
-    expect(retained.bosbotDevice).toEqual(bosbotDevice);
-    expect(retained.state.settings.theme).toBe('slate'); expect(retained.state.settings.gap).toBe(14);
-  } finally {
-    await context.close();
-    for (const [name, contents] of original.files) await writeFile(join(staging, name), contents);
-    await promoteExtension(staging, extensionPath); await rm(staging, { recursive: true, force: true });
-    await rm(profile, { recursive: true, force: true });
-  }
+test('same-folder updates retain identity, personal key and saved preferences',async()=>{
+  const profile=await mkdtemp(join(tmpdir(),'torndashboard-update-profile-')),staging=await mkdtemp(join(tmpdir(),'torndashboard-update-stage-')),extensionPath=resolve('..');
+  const{readRuntime,promoteExtension}=await import(/* @vite-ignore */new URL('../../scripts/extension-runtime.mjs',import.meta.url).href);const original=await readRuntime(extensionPath);let context=await launch(profile);
+  try{
+    let worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');const id=new URL(worker.url()).hostname,state=defaultState();state.settings.theme='slate';state.settings.gap=14;
+    const tornCredential={key:TEST_KEY,userId:55,remember:true};await worker.evaluate(async data=>chrome.storage.local.set(data),{state,tornCredential,personalApiV4:true});await context.close();
+    for(const[name,contents]of original.files)await writeFile(join(staging,name),contents);const parts=original.manifest.version.split('.').map(Number);await writeFile(join(staging,'manifest.json'),JSON.stringify({...original.manifest,version:`${parts[0]}.${parts[1]}.${parts[2]+1}`}));await promoteExtension(staging,extensionPath);
+    context=await launch(profile);worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');expect(new URL(worker.url()).hostname).toBe(id);const retained=await worker.evaluate(async()=>chrome.storage.local.get<{state:PublicState;tornCredential:unknown}>(['state','tornCredential']));expect(retained.tornCredential).toEqual(tornCredential);expect(retained.state.settings.theme).toBe('slate');expect(retained.state.settings.gap).toBe(14);
+  }finally{await context.close();for(const[name,contents]of original.files)await writeFile(join(staging,name),contents);await promoteExtension(staging,extensionPath);await rm(staging,{recursive:true,force:true});await rm(profile,{recursive:true,force:true});}
 });
 
-test('legacy state migrates to BOSBOT only while preserving drag positions and blocking private storage', async ({ browserName }) => {
-  expect(browserName).toBe('chromium');
-  const extensionPath = resolve('..');
-  const profile = await mkdtemp(join(tmpdir(), 'torndashboard-legacy-profile-'));
-  const context = await chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true, viewport: { width: 1920, height: 1080 }, args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`] });
-  try {
-    const worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker'), id = new URL(worker.url()).hostname;
-    const legacy = defaultState(); legacy.settings.dataSource = 'mock'; legacy.settings.autoSwitching = false; legacy.settings.theme = 'torn-dark';
-    await worker.evaluate(async state => { await chrome.storage.local.clear(); await chrome.storage.local.set({ state }); }, legacy);
-    const fixture = (await readFile('packages/extension/demo/index.html', 'utf8')).replace('<script type="module" src="demo.js"></script>', '');
-    await context.route('https://www.torn.com/**', route => route.fulfill({ body: fixture, contentType: 'text/html' }));
-    const page = await context.newPage(); await page.goto('https://www.torn.com/index.php'); const host = page.locator('#tcd-dashboard');
-    await expect(host.locator('.source-badge')).toHaveText('NO DATA'); await expect(host.locator('.dashboard')).toHaveAttribute('data-theme', 'liquid-glass');
-    const options = await context.newPage(); await options.goto(`chrome-extension://${id}/options.html`); await expect(options.locator('#status')).toHaveText('Ready');
-    await expect(options.locator('[name="dataSource"]')).toHaveCount(0); await expect(options.locator('[name="tornKey"]')).toHaveCount(0);
-    await host.getByLabel('Dashboard preset').selectOption('WAR');
-    await expect(host.getByLabel('Dashboard preset')).toHaveValue('WAR');
-    const left = host.locator('.widget-list[data-side="left"]'), right = host.locator('.widget-list[data-side="right"]');
-    const handle = await left.getByLabel('Drag Recommended Targets', { exact: true }).boundingBox(), destination = await right.boundingBox();
-    await page.mouse.move(handle!.x + handle!.width/2, handle!.y + handle!.height/2); await page.mouse.down();
-    await page.mouse.move(handle!.x + handle!.width/2+15, handle!.y + handle!.height/2, { steps: 4 });
-    await page.mouse.move(destination!.x + destination!.width/2, destination!.y + destination!.height-10, { steps: 30 }); await page.mouse.up();
-    await expect(right.locator('[data-widget-id="recommended-targets"]')).toHaveCount(1);
-    await page.reload(); await expect(right.locator('[data-widget-id="recommended-targets"]')).toHaveCount(1);
-    const migrated = await worker.evaluate(async () => (await chrome.storage.local.get<{ state: PublicState }>('state')).state); expect(migrated.settings.dataSource).toBe('bosbot');
-    await expect(host.locator('[data-widget-id="travel-profit"]')).toHaveCount(0);
-    await expect(host.locator('[data-widget-id="company-addiction"]')).toHaveCount(0);
-    const cdp = await context.newCDPSession(page); let isolated = 0;
-    cdp.on('Runtime.executionContextCreated', event => { if (event.context.auxData?.type === 'isolated' && !event.context.name.startsWith('__playwright')) isolated = event.context.id; });
-    await cdp.send('Runtime.enable'); await expect.poll(() => isolated).toBeGreaterThan(0);
-    const denied = await cdp.send('Runtime.evaluate', { contextId: isolated, expression: `chrome.runtime.sendMessage({type:'BOSBOT_CONNECT'})`, awaitPromise: true, returnByValue: true }); expect(denied.result.value).toMatchObject({ ok: false });
-    const inaccessible = await cdp.send('Runtime.evaluate', { contextId: isolated, expression: `(async()=>{try{await chrome.storage.local.get('bosbotDevice');return false}catch{return true}})()`, awaitPromise: true, returnByValue: true }); expect(inaccessible.result.value).toBe(true);
-  } finally { await context.close(); await rm(profile, { recursive: true, force: true }); }
+test('legacy BOS state migrates, saves dragging and keeps personal credentials outside content scripts',async()=>{
+  const profile=await mkdtemp(join(tmpdir(),'torndashboard-migration-profile-')),context=await launch(profile);
+  try{
+    const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker'),id=new URL(worker.url()).hostname;
+    const legacy=defaultState();legacy.settings.dataSource='bosbot';legacy.settings.autoSwitching=false;legacy.layouts.WAR.right.push('restock');delete(legacy.layouts as Partial<typeof legacy.layouts>).CUSTOM;
+    await worker.evaluate(async state=>{await chrome.storage.local.clear();await chrome.storage.local.set({state,bosbotDevice:{token:'TEST_ONLY_OLD_DEVICE'}});},legacy);
+    await context.route('https://www.torn.com/**',async route=>route.fulfill({body:await fixture(),contentType:'text/html'}));
+    const page=await context.newPage();await page.goto('https://www.torn.com/index.php');const host=page.locator('#tcd-dashboard');await expect(host.locator('.source-badge')).toHaveText('NO DATA');await host.getByLabel('Dashboard preset').selectOption('WAR');await expect(host.locator('.widget-card')).toHaveCount(2);await host.getByLabel('Arrange widgets').click();
+    const left=host.locator('.widget-list[data-side="left"]'),right=host.locator('.widget-list[data-side="right"]'),handle=await right.getByLabel('Drag Recommended Targets',{exact:true}).boundingBox(),destination=await left.boundingBox();
+    await page.mouse.move(handle!.x+handle!.width/2,handle!.y+handle!.height/2);await page.mouse.down();await page.mouse.move(handle!.x+handle!.width/2+15,handle!.y+handle!.height/2,{steps:4});await page.mouse.move(destination!.x+destination!.width/2,destination!.y+destination!.height-10,{steps:30});await page.mouse.up();
+    await expect(left.locator('[data-widget-id="recommended-targets"]')).toHaveCount(1);await page.reload();await expect(left.locator('[data-widget-id="recommended-targets"]')).toHaveCount(1);
+    const migrated=await worker.evaluate(async()=>chrome.storage.local.get<{state:PublicState;bosbotDevice?:unknown}>(['state','bosbotDevice']));expect(migrated.state.settings.dataSource).toBe('torn');expect(migrated.state.layouts.CUSTOM.right).toContain('restock');expect(migrated.bosbotDevice).toBeUndefined();
+    const options=await context.newPage();await options.goto(`chrome-extension://${id}/options.html`);await expect(options.getByLabel('Torn API key')).toHaveCount(1);await expect(options.getByText('BOSBOT connection',{exact:true})).toHaveCount(0);
+    const{cdp,isolated}=await isolatedContext(context,page);
+    for(const type of ['KEY_STATUS','SAVE_KEY']){const denied=await cdp.send('Runtime.evaluate',{contextId:isolated,expression:`chrome.runtime.sendMessage({type:'${type}',${type==='SAVE_KEY'?`key:'${TEST_KEY}',remember:true`:''}})`,awaitPromise:true,returnByValue:true});expect(denied.result.value).toMatchObject({ok:false});}
+    const denied=await cdp.send('Runtime.evaluate',{contextId:isolated,expression:"(async()=>{try{await chrome.storage.local.get('tornCredential');return false}catch{return true}})()",awaitPromise:true,returnByValue:true});expect(denied.result.value).toBe(true);
+    await host.getByLabel('Dashboard preset').selectOption('CUSTOM');await expect(host.getByLabel('Dashboard preset')).toHaveValue('CUSTOM');await expect(host.locator('[data-widget-id="restock"]')).toHaveCount(1);
+  }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });
 
-test('BOSBOT pairing, live widgets, restart persistence and revocation keep device credentials private', async ({ browserName }) => {
-  test.setTimeout(90000);
-  expect(browserName).toBe('chromium');
-  const { default: Fastify } = await import('fastify');
-  const server = Fastify();
-  const token = 'TEST_ONLY_BOSBOT_DEVICE_TOKEN_000000000000000000000';
-  let approved = false; let revoked = false; let pairingRequests = 0; let snapshotRequests = 0;
-  const source = {
-    source: 'live', provider: 'bosbot', generatedAt: Date.now(), issues: {},
-    war: { active: true, opponent: 'BOSBOT opponent', score: 500, enemyScore: 400, targetScore: 1000, endsAt: null, observedAt: Date.now() },
-    chain: { count: 49, goal: 50, expiresAt: Date.now() + 120000, observedAt: Date.now() },
-    travel: { active: false, origin: 'Torn', destination: 'Japan', arrivesAt: Date.now() + 600000, observedAt: Date.now() }, player: { level: 40 },
-    targets: [
-      { id: 123, name: 'BOSBOT recommendation', level: 20, status: 'Okay', activity: 'online', observedAt: Date.now(), hospitalUntil: null, wins: null, losses: null, battleStats: null, statsSource: null, recommendation: { score: 777, reasons: ['Assigned by BOSBOT'], confidence: 'low', label: 'BOSBOT availability' } },
-      { id: 124, name: 'BOSBOT hospitalized', level: 25, status: 'Hospital', activity: 'offline', observedAt: Date.now(), hospitalUntil: Date.now() + 120000, wins: null, losses: null, battleStats: null, recommendation: { score: 0, reasons: ['Hospitalized'], confidence: 'low', label: 'BOSBOT availability' } }
-    ],
-    company: { isDirector: false, name: '', observedAt: null, employees: [] } as { isDirector: boolean; name: string; observedAt: number | null; employees: { id: number; name: string; addictionEffect: number | null }[] },
-    stocks: [{ itemId: 206, name: 'Xanax', country: 'Switzerland', stock: 50, cost: 100, tornValue: 400, priceObservedAt: Date.now(), observedAt: Date.now(), restock: { kind: 'estimated', earliest: Date.now() + 100000, latest: Date.now() + 300000, confidence: 'low', samples: 3, lastSeenRestock: Date.now() - 500000, intervalHistory: [600000, 610000] } }],
-    favorites: [{ itemId: 206, name: 'Xanax', country: 'Switzerland', minimumStock: 7, alert: true }]
-  };
-  server.post('/api/extension/pair/start', async () => {
-    pairingRequests++; return { pairingId: 'test_pairing_id_000000000000', pollingSecret: 'TEST_ONLY_POLL_SECRET_000000000000', expiresAt: Date.now() + 300000, verificationUrl: 'http://127.0.0.1:4318/extension/connect?pairingId=test_pairing_id_000000000000' };
-  });
-  server.get('/extension/connect', async (_, reply) => reply.type('text/html').send('<h1>Fixture approval page</h1>'));
-  server.post('/api/extension/pair/poll', async () => approved ? { status: 'approved', token, deviceId: 'test_device_000000000000', expiresAt: Date.now() + 86400000 } : { status: 'pending' });
-  server.get('/api/extension/snapshot', async (request, reply) => {
-    snapshotRequests++;
-    if (revoked || request.headers.authorization !== `Bearer ${token}`) return reply.code(401).send({ error: 'Revoked' });
-    return { ...source, generatedAt: Date.now() };
-  });
-  server.delete('/api/extension/device', async () => { revoked = true; return { revoked: true }; });
-  await server.listen({ host: '127.0.0.1', port: 4318 });
-  const extensionPath = resolve('..'); const profile = await mkdtemp(join(tmpdir(), 'torndashboard-bosbot-profile-'));
-  const launch = () => chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true, viewport: { width: 1920, height: 1080 }, args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`] });
-  let context = await launch();
-  const fixture = (await readFile('packages/extension/demo/index.html', 'utf8')).replace('<script type="module" src="demo.js"></script>', '');
-  try {
-    let worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
-    const id = new URL(worker.url()).hostname;
-    await context.route('https://www.torn.com/**', route => route.fulfill({ body: fixture, contentType: 'text/html' }));
-    await worker.evaluate(async state => { await chrome.storage.local.set({ state }); }, { ...defaultState(), settings: { ...defaultState().settings, bosbotUrl: 'http://127.0.0.1:4318', autoSwitching: true } });
-    const page = await context.newPage(); await page.goto('https://www.torn.com/index.php');
-    const host = page.locator('#tcd-dashboard'); await expect(host.locator('.source-badge')).toHaveText('NO DATA');
-    const options = await context.newPage(); await options.goto(`chrome-extension://${id}/options.html`); await expect(options.locator('#status')).toHaveText('Ready');
-    await options.getByRole('button', { name: 'Connect BOSBOT account', exact: true }).click();
-    await expect(options.locator('#bosbot-status')).toContainText('Waiting for approval'); approved = true;
-    await expect(options.locator('#bosbot-status')).toContainText('live feed verified');
-    await expect(host.locator('.source-badge')).toHaveText('BOSBOT'); await expect(host.getByLabel('Dashboard preset')).toHaveValue('WAR');
-    await expect(host.locator('[data-widget-id="war-status"]')).toContainText('BOSBOT opponent');
-    await expect(host.locator('[data-widget-id="chain"]')).toContainText('49 / 50');
-    await expect(host.locator('[data-widget-id="hospital-timers"]')).toContainText('BOSBOT hospitalized');
-    await expect(host.locator('[data-widget-id="recommended-targets"]')).toContainText('777');
-    await expect(host.locator('[data-widget-id="recommended-targets"]')).toContainText('Stats: unknown');
-    await expect(host.locator('[data-widget-id="travel-favorites"]')).toContainText('IN STOCK');
-    await expect(host.locator('[data-widget-id="restock"]')).toContainText('ESTIMATED WINDOW');
-    const secondTornTab = await context.newPage(); await secondTornTab.goto('https://www.torn.com/profiles.php?XID=123');
-    await expect(secondTornTab.locator('#tcd-dashboard .source-badge')).toHaveText('BOSBOT'); expect(snapshotRequests).toBe(1);
-    await options.getByRole('button', { name: 'Import BOSBOT favorites', exact: true }).click();
-    await expect(options.getByLabel('Minimum stock for Xanax in Switzerland')).toHaveValue('7');
-    expect(await host.textContent()).not.toContain(token);
-    const publicReply = await options.evaluate(async () => chrome.runtime.sendMessage({ type: 'READ_STATE' }));
-    expect(JSON.stringify(publicReply)).not.toContain(token);
-    const cdp = await context.newCDPSession(page); let isolated = 0;
-    cdp.on('Runtime.executionContextCreated', event => { if (event.context.auxData?.type === 'isolated' && !event.context.name.startsWith('__playwright')) isolated = event.context.id; });
-    await cdp.send('Runtime.enable'); await expect.poll(() => isolated).toBeGreaterThan(0);
-    const denied = await cdp.send('Runtime.evaluate', { contextId: isolated, expression: `chrome.runtime.sendMessage({type:'BOSBOT_STATUS'})`, awaitPromise: true, returnByValue: true });
-    expect(denied.result.value).toMatchObject({ ok: false });
-    const deniedStorage = await cdp.send('Runtime.evaluate', { contextId: isolated, expression: `(async()=>{try{await chrome.storage.local.get('bosbotDevice');return false}catch{return true}})()`, awaitPromise: true, returnByValue: true });
-    expect(deniedStorage.result.value).toBe(true);
-    // Test the actual offscreen document and bundled audio, rather than mocking playback.
-    await options.getByRole('button', { name: 'Test warning sound', exact: true }).click();
-    await expect(options.locator('#status')).toContainText('Warning sound played');
-    const offscreen = await worker.evaluate(() => chrome.runtime.getContexts({ contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT] })); expect(offscreen.length).toBe(1);
-    source.travel.active = true;
-    source.stocks.push({ itemId: 268, name: 'Cherry Blossom', country: 'Japan', stock: 25, cost: 500, tornValue: 20000, priceObservedAt: Date.now(), observedAt: Date.now(), restock: { kind: 'estimated', earliest: Date.now()+100000, latest: Date.now()+300000, confidence: 'low', samples: 3, lastSeenRestock: Date.now()-500000, intervalHistory: [600000,610000] } });
-    source.stocks.push({ ...source.stocks[1]!, itemId: 269, name: 'Monkey Plushie', stock: 0, tornValue: 40000 });
-    await options.getByRole('button', { name: 'Refresh BOSBOT data', exact: true }).click();
-    await expect(host.getByLabel('Dashboard preset')).toHaveValue('TRAVEL');
-    const market = host.locator('[data-widget-id="travel-market"]'); await expect(market).toContainText('Automatically detected: Japan');
-    await expect(market.locator('.profit-hero')).toContainText('Cherry Blossom');
-    await expect(market.locator('.market-product')).toHaveCount(2);
-    await market.getByLabel('In stock only', { exact: true }).check(); await expect(market.locator('.market-product')).toHaveCount(1);
-    await market.getByLabel('In stock only', { exact: true }).uncheck(); await market.getByLabel('Search products').fill('monkey'); await expect(market.locator('.market-product')).toHaveCount(1); await expect(market.locator('.market-product')).toContainText('Monkey Plushie');
-    await expect(market.getByLabel('Search products')).toBeFocused();
-    await expect(market.getByLabel('Search products')).toHaveValue('monkey');
-    await market.getByLabel('Search products').fill(''); await market.getByLabel('Watch Cherry Blossom in Japan', { exact: true }).click();
-    const calculator = host.locator('[data-widget-id="travel-profit"]'); await expect(calculator).toHaveCount(1);
-    await calculator.getByLabel('Quantity', { exact: true }).fill('10'); await expect(calculator).toContainText('$195,000');
-    await page.screenshot({ path: resolve('docs/bosbot-travel-preview.png'), fullPage: true });
-    source.travel.active = false; source.war.active = false; source.company = { isDirector: true, name: 'BOSBOT Company', observedAt: Date.now(), employees: [{ id: 111, name: 'Employee A', addictionEffect: -8 }] };
-    await options.getByRole('button', { name: 'Refresh BOSBOT data', exact: true }).click();
-    await expect(host.getByLabel('Dashboard preset')).toHaveValue('NORMAL'); await expect(host.locator('[data-widget-id="travel-profit"]')).toHaveCount(0);
-    await expect(host.locator('[data-widget-id="company-addiction"]')).toContainText('Employee A');
-    source.chain.expiresAt = Date.now()+30000; source.chain.observedAt = Date.now();
-    await options.getByRole('button', { name: 'Refresh BOSBOT data', exact: true }).click();
-    await expect(host.locator('[data-widget-id="chain"] .chain-warning')).toBeVisible();
-    await expect.poll(async () => (await worker.evaluate(async () => (await chrome.storage.local.get<{ alertState: { memory: { seen: string[] } } }>('alertState')).alertState.memory.seen)).filter((key: string) => key.startsWith('chain:')).length).toBe(1);
-    await expect.poll(async () => await worker.evaluate(async () => (await chrome.storage.local.get<{ alertDelivery: { failed: boolean } }>('alertDelivery')).alertDelivery.failed)).toBe(false);
-    source.stocks[1]!.stock = 0; source.stocks[1]!.observedAt = Date.now();
-    await options.getByRole('button', { name: 'Refresh BOSBOT data', exact: true }).click();
-    await expect(host.locator('[data-widget-id="travel-favorites"]')).toContainText('OUT OF STOCK');
-    source.stocks[1]!.stock = 10; source.stocks[1]!.observedAt = Date.now();
-    await options.getByRole('button', { name: 'Refresh BOSBOT data', exact: true }).click();
-    await expect.poll(async () => (await worker.evaluate(async () => (await chrome.storage.local.get<{ alertState: { memory: { seen: string[] } } }>('alertState')).alertState.memory.seen)).filter((key: string) => key.startsWith('stock:')).length).toBe(1);
-    await page.screenshot({ path: resolve('docs/bosbot-preview.png'), fullPage: true });
-    await context.close(); context = await launch();
-    worker = context.serviceWorkers()[0] || await context.waitForEvent('serviceworker');
-    await context.route('https://www.torn.com/**', route => route.fulfill({ body: fixture, contentType: 'text/html' }));
-    const reopened = await context.newPage(); await reopened.goto('https://www.torn.com/index.php');
-    await expect(reopened.locator('#tcd-dashboard .source-badge')).toHaveText('BOSBOT'); expect(pairingRequests).toBe(1);
-    const reopenedOptions = await context.newPage(); await reopenedOptions.goto(`chrome-extension://${id}/options.html`);
-    await expect(reopenedOptions.locator('#bosbot-status')).toContainText('live feed verified');
-    await reopenedOptions.getByRole('button', { name: 'Disconnect BOSBOT', exact: true }).click();
-    await expect(reopenedOptions.locator('#bosbot-status')).toContainText('No BOSBOT account connected');
-    await reopened.reload(); await expect(reopened.locator('#tcd-dashboard .source-badge')).toHaveText('NO DATA');
-    expect(revoked).toBe(true);
-  } finally { await context.close(); await server.close(); await rm(profile, { recursive: true, force: true }); }
+test('personal API and YATA power only Dubai travel products, grouped watches and a bag optimizer',async()=>{
+  test.setTimeout(90000);const profile=await mkdtemp(join(tmpdir(),'torndashboard-travel-profile-')),context=await launch(profile);
+  try{
+    const calls=await mockTorn(context,{travel:true}),worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker'),id=new URL(worker.url()).hostname;
+    const state=defaultState();state.settings.stockProvider='yata';state.settings.bag.capacity=29;state.favorites=[{itemId:3,name:'Xanax',country:'Switzerland',minimumStock:1,alert:true}];
+    await worker.evaluate(async data=>{await chrome.storage.local.set(data);},{state,personalApiV4:true});
+    const options=await context.newPage();await options.goto(`chrome-extension://${id}/options.html`);await options.getByLabel('Torn API key').fill(TEST_KEY);await options.getByRole('button',{name:'Connect Torn API',exact:true}).click();await expect(options.locator('#key-status')).toContainText('#55');
+    const page=await context.newPage();await page.goto('https://www.torn.com/page.php?sid=travel');const host=page.locator('#tcd-dashboard'),dock=page.locator('#tcd-travel-dock');
+    await expect(host.locator('.source-badge')).toHaveText('TORN API');await expect(host.getByLabel('Dashboard preset')).toHaveValue('TRAVEL');await expect(host.locator('[data-widget-id="chain"]')).toHaveCount(0);
+    const market=dock.locator('[data-widget-id="travel-market"]');await expect(market).toContainText('Automatically detected: UAE');await expect(market.locator('.market-product')).toHaveCount(2);await expect(market).not.toContainText('Xanax');await expect(market).not.toContainText('Monkey Plushie');
+    const calculator=dock.locator('[data-widget-id="travel-profit"]');await expect(calculator).toContainText('29 × Camel Plushie');await expect(calculator).toContainText('$84,100');await expect(page.locator('#travel-flight + #tcd-travel-dock')).toHaveCount(1);
+    await market.getByLabel('In stock only',{exact:true}).check();await expect(market.locator('.market-product')).toHaveCount(1);await market.getByLabel('In stock only',{exact:true}).uncheck();await market.getByLabel('Search products').fill('trib');await expect(market.locator('.market-product')).toHaveCount(1);await expect(market.getByLabel('Search products')).toHaveValue('trib');await expect(market.getByLabel('Search products')).toBeFocused();
+    await market.getByLabel('Search products').fill('');await market.getByLabel('Watch Camel Plushie in UAE',{exact:true}).click();await expect(host.locator('[data-widget-id="travel-favorites"]')).toContainText('UAE');await expect(host.locator('[data-widget-id="travel-favorites"]')).not.toContainText('Switzerland');
+    await options.reload();await expect(options.locator('#favorites .watch-country')).toHaveCount(2);await expect(options.locator('#favorites')).toContainText('Plushies');
+    await calculator.getByLabel('Available capacity',{exact:true}).fill('10');await calculator.getByRole('button',{name:'Optimize Bag',exact:true}).click();await expect(calculator).toContainText('10 × Camel Plushie');await page.reload();await expect(calculator.getByLabel('Available capacity',{exact:true})).toHaveValue('10');
+    await options.getByRole('button',{name:'Test warning sound',exact:true}).click();await expect(options.locator('#status')).toContainText('Warning sound played');expect((await worker.evaluate(()=>chrome.runtime.getContexts({contextTypes:[chrome.runtime.ContextType.OFFSCREEN_DOCUMENT]}))).length).toBe(1);
+    const second=await context.newPage();await second.goto('https://www.torn.com/page.php?sid=travel');await expect(second.locator('#tcd-dashboard .source-badge')).toHaveText('TORN API');expect((await calls.evaluate(()=> (globalThis as unknown as {fixtureCalls:string[]}).fixtureCalls)).filter(path=>path==='torn/items')).toHaveLength(1);
+    const reply=await options.evaluate(async()=>chrome.runtime.sendMessage({type:'READ_STATE'}));expect(JSON.stringify(reply)).not.toContain(TEST_KEY);expect(await page.content()).not.toContain(TEST_KEY);
+    await page.screenshot({path:resolve('docs/travel-preview.png'),fullPage:true});
+    await options.getByRole('button',{name:'Remove API key',exact:true}).click();await expect(options.locator('#key-status')).toContainText('No personal API key');await expect(host.locator('.source-badge')).toHaveText('NO DATA');await expect(dock).toBeHidden();
+  }finally{await context.close();await rm(profile,{recursive:true,force:true});}
+});
+
+test('WAR has only chain and live opponent recommendations, with an actual 30 second sound alert',async()=>{
+  const profile=await mkdtemp(join(tmpdir(),'torndashboard-war-profile-')),context=await launch(profile);
+  try{
+    await mockTorn(context,{travel:false,chainTimeout:30});const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker'),id=new URL(worker.url()).hostname;
+    await worker.evaluate(async data=>chrome.storage.local.set(data),{state:defaultState(),personalApiV4:true});const options=await context.newPage();await options.goto(`chrome-extension://${id}/options.html`);await options.getByLabel('Torn API key').fill(TEST_KEY);await options.getByRole('button',{name:'Connect Torn API',exact:true}).click();await expect(options.locator('#key-status')).toContainText('#55');
+    const page=await context.newPage();await page.goto('https://www.torn.com/index.php');const host=page.locator('#tcd-dashboard');await expect(host.getByLabel('Dashboard preset')).toHaveValue('WAR');await expect(host.locator('.widget-card')).toHaveCount(2);await expect(host.locator('[data-widget-id="recommended-targets"]')).toContainText('Actual opponent');await expect(host.locator('[data-widget-id="recommended-targets"]')).toContainText('Opponent A');await expect(host.locator('[data-widget-id="recommended-targets"]')).toContainText('Stats: unknown');await expect(host.locator('[data-widget-id="chain"] .chain-warning')).toBeVisible();
+    await expect.poll(async()=>{const stored=await worker.evaluate(async()=>chrome.storage.local.get<{alertDelivery?:{failed:boolean}}>('alertDelivery'));return stored.alertDelivery?.failed;}).toBe(false);await expect.poll(async()=>{const stored=await worker.evaluate(async()=>chrome.storage.local.get<{alertState?:{memory:{seen:string[]}}}>('alertState'));return stored.alertState?.memory.seen.filter((key:string)=>key.startsWith('chain:')).length;}).toBe(1);
+    await page.screenshot({path:resolve('docs/war-preview.png'),fullPage:true});
+  }finally{await context.close();await rm(profile,{recursive:true,force:true});}
+});
+
+
+test('company addiction is director-only, while CUSTOM retains arbitrary widget selection',async()=>{
+  const profile=await mkdtemp(join(tmpdir(),'torndashboard-director-profile-')),context=await launch(profile);
+  try{
+    await mockTorn(context,{travel:false,director:true});const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker'),id=new URL(worker.url()).hostname;
+    const state=defaultState();state.settings.mode='CUSTOM';state.settings.autoSwitching=false;
+    await worker.evaluate(async data=>chrome.storage.local.set(data),{state,personalApiV4:true});const options=await context.newPage();await options.goto(`chrome-extension://${id}/options.html`);await options.getByLabel('Torn API key').fill(TEST_KEY);await options.getByRole('button',{name:'Connect Torn API',exact:true}).click();await expect(options.locator('#key-status')).toContainText('#55');
+    const page=await context.newPage();await page.goto('https://www.torn.com/index.php');const host=page.locator('#tcd-dashboard');await expect(host.getByLabel('Dashboard preset')).toHaveValue('CUSTOM');await expect(host.locator('[data-widget-id="company-addiction"]')).toContainText('Employee A');await expect(host.locator('[data-widget-id="company-addiction"]')).toContainText('-8');await expect(host.locator('[data-widget-id="travel-profit"]')).toHaveCount(0);
+    await options.getByLabel('Panel width',{exact:true}).fill('340');await options.getByLabel('Density',{exact:true}).selectOption('comfortable');await options.getByRole('button',{name:'Save settings',exact:true}).click();await expect(options.locator('#status')).toContainText('Settings saved');await expect(host.locator('.dashboard')).toHaveAttribute('data-density','comfortable');
+    await host.getByLabel('Dashboard preset').selectOption('WAR');await expect(host.locator('.widget-card')).toHaveCount(2);await expect(host.locator('[data-widget-id="company-addiction"]')).toHaveCount(0);
+  }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });

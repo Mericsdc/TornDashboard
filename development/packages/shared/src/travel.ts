@@ -9,17 +9,29 @@ export function unitProfit(item: StockItem): number | null {
 export function pricingFresh(item: StockItem, now: number): boolean {
   return Boolean(item.observedAt && now - item.observedAt >= -30000 && now - item.observedAt <= 180000 && item.priceObservedAt && now - item.priceObservedAt >= -30000 && now - item.priceObservedAt <= 2 * 3600000);
 }
+export const COUNTRIES = ['Mexico', 'Hawaii', 'South Africa', 'Japan', 'China', 'Argentina', 'Switzerland', 'Canada', 'United Kingdom', 'UAE', 'Cayman Islands'] as const;
+export function canonicalCountry(value: string | null | undefined): string | null {
+  const text = value?.trim().toLowerCase();
+  if (!text) return null;
+  if (['dubai', 'united arab emirates', 'uae'].includes(text)) return 'UAE';
+  if (['uk', 'united kingdom'].includes(text)) return 'United Kingdom';
+  if (text === 'torn') return 'Torn';
+  return COUNTRIES.find(country => country.toLowerCase() === text) || null;
+}
 export function travelCountry(snapshot: Snapshot | null): string | null {
   const travel = snapshot?.travel;
   if (!travel?.active) return null;
-  return travel.destination === 'Torn' ? travel.origin : travel.destination;
+  const destination = canonicalCountry(travel.destination);
+  const country = destination === 'Torn' ? canonicalCountry(travel.origin) : destination;
+  return country === 'Torn' ? null : country;
 }
-export function category(item: StockItem): 'flowers' | 'plushies' | 'other' {
+export function category(item: Pick<StockItem, 'name'>): 'flowers' | 'plushies' | 'other' {
   return FLOWERS.has(item.name) ? 'flowers' : item.name.endsWith(' Plushie') ? 'plushies' : 'other';
 }
 export function marketRows(snapshot: Snapshot, settings: Settings['market'], favorites: Favorite[], now: number): StockItem[] {
-  const country = settings.country === 'auto' ? travelCountry(snapshot) : settings.country;
-  return snapshot.stocks.filter(item => (!country || country === 'all' || item.country === country)
+  const country = snapshot.travel?.active || settings.country === 'auto' ? travelCountry(snapshot) : settings.country === 'all' ? 'all' : canonicalCountry(settings.country);
+  if (!country) return []; // An unknown destination must never expose unrelated countries.
+  return snapshot.stocks.filter(item => (country === 'all' || canonicalCountry(item.country) === country)
     && item.name.toLowerCase().includes(settings.search.toLowerCase())
     && (!settings.inStock || (freshStock(item, now) && (item.stock || 0) > 0))
     && (!settings.favoritesOnly || favorites.some(f => f.itemId === item.itemId && f.country === item.country))
@@ -43,4 +55,36 @@ export function calculateProfit(cost: number | null | undefined, value: number |
   if (!cost || !value || !Number.isFinite(cost) || !Number.isFinite(value) || !Number.isFinite(feePercent) || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10000 || feePercent < 0 || feePercent > 100) return null;
   const purchase = cost * quantity, grossValue = value * quantity, proceeds = grossValue * (1 - feePercent / 100);
   return { purchase, grossValue, profit: proceeds - purchase, roi: (proceeds - purchase) / purchase * 100 };
+}
+
+export interface BagPlan { purchases: { item: StockItem; quantity: number }[]; quantity: number; cost: number; tornValue: number; profit: number; optimal: boolean }
+/** Bounded bag knapsack. Budget states retain non-dominated cost/profit alternatives. */
+export function optimizeBag(items: StockItem[], capacity: number, budget: number | null, feePercent: number, now: number): BagPlan | null {
+  if (!Number.isInteger(capacity) || capacity < 1 || capacity > 100 || !Number.isFinite(feePercent) || feePercent < 0 || feePercent > 100 || (budget !== null && (!Number.isFinite(budget) || budget < 0))) return null;
+  type Plan = { cost: number; value: number; profit: number; counts: Map<StockItem, number> };
+  const states: Plan[][] = Array.from({ length: capacity + 1 }, () => []);
+  states[0]!.push({ cost: 0, value: 0, profit: 0, counts: new Map() });
+  let optimal = true;
+  for (const item of items.filter(i => freshStock(i, now) && pricingFresh(i, now) && i.cost && i.tornValue && i.tornValue * (1 - feePercent / 100) > i.cost)) {
+    const profit = item.tornValue! * (1 - feePercent / 100) - item.cost!;
+    const max = Math.min(capacity, item.stock!);
+    for (let q = capacity; q >= 0; q--) {
+      const prior = [...states[q]!];
+      for (const plan of prior) for (let n = 1; n <= Math.min(max, capacity - q); n++) {
+        const cost = plan.cost + item.cost! * n;
+        if (budget !== null && cost > budget) break;
+        const counts = new Map(plan.counts); counts.set(item, n);
+        states[q + n]!.push({ cost, value: plan.value + item.tornValue! * n, profit: plan.profit + profit * n, counts });
+      }
+    }
+    for (let q = 1; q <= capacity; q++) {
+      const sorted = states[q]!.sort((a, b) => a.cost - b.cost || b.profit - a.profit);
+      let best = -Infinity;
+      states[q] = sorted.filter(plan => { if (plan.profit <= best) return false; best = plan.profit; return true; });
+      if (states[q]!.length > 500) { optimal = false; states[q] = states[q]!.sort((a, b) => b.profit - a.profit).slice(0, 500); }
+      if (budget === null) states[q] = states[q]!.sort((a,b) => b.profit-a.profit).slice(0,1);
+    }
+  }
+  const best = states.flat().sort((a,b) => b.profit-a.profit || a.cost-b.cost)[0]!;
+  return { purchases: [...best.counts].map(([item, quantity]) => ({ item, quantity })), quantity: [...best.counts.values()].reduce((a,b)=>a+b,0), cost: best.cost, tornValue: best.value, profit: best.profit, optimal };
 }

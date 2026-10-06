@@ -1,4 +1,5 @@
 import type { Favorite, Layout, Mode, PublicState, Settings, Snapshot } from '@tcd/shared';
+import { canonicalCountry, COUNTRIES } from '@tcd/shared';
 import { send } from './protocol';
 
 export interface DashboardStore {
@@ -16,7 +17,17 @@ export class ExtensionStore implements DashboardStore {
   settings = (patch: Partial<Settings>) => send<PublicState>({ type: 'SAVE_SETTINGS', patch });
   layout = (mode: Mode, layout: Layout) => send<PublicState>({ type: 'SAVE_LAYOUT', mode, layout });
   favorites = (favorites: Favorite[]) => send<PublicState>({ type: 'SAVE_FAVORITES', favorites });
-  snapshot = () => send<Snapshot>({ type: 'GET_SNAPSHOT' });
+  snapshot = async () => {
+    if (/(?:sid=travel|travelagency)/i.test(location.href)) {
+      const main=document.querySelector('#mainContainer, #main-content, main, .content-wrapper');
+      const text=main?.textContent?.slice(0,30000)||'';
+      const names=[...COUNTRIES,'Torn','Dubai','United Arab Emirates','UK'].sort((a,b)=>b.length-a.length).join('|');
+      const match=text.match(new RegExp(`(${names})\\s*(?:to|→)\\s*(${names})`,'i'));
+      const origin=canonicalCountry(match?.[1]),destination=canonicalCountry(match?.[2]);
+      if(origin&&destination)await send({type:'TRAVEL_HINT',origin:origin as typeof COUNTRIES[number] | 'Torn',destination:destination as typeof COUNTRIES[number] | 'Torn'});
+    }
+    return send<Snapshot>({type:'GET_SNAPSHOT'});
+  };
   checkAlerts = () => send<void>({ type: 'CHECK_ALERTS' });
   openOptions = () => send<void>({ type: 'OPEN_OPTIONS' });
   subscribe(listener: (refreshData?: boolean) => void): () => void {

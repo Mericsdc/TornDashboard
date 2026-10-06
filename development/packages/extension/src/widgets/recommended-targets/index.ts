@@ -22,5 +22,5 @@ export const recommendedTargets = widget({ id: 'recommended-targets', title: 'Re
     const reasons = el('details', 'reasons'); reasons.append(el('summary', '', `${scored.classification} · evidence ${scored.confidence}${typeof scored.confidence === 'number' ? '%' : ''}`));
     scored.reasons.forEach(reason => reasons.append(note(reason))); row.append(score, info, action, reasons); return row;
   });
-  return [note(bosbot ? 'Order and reasons from BOSBOT. Missing battle stats remain unknown.' : 'Score ranks observed availability and history. Strength remains unknown.'), ...(rows.length ? rows : [note(snapshot.issues?.targets || 'No fresh, available targets')])];
+  return [note(snapshot.war?.active ? `Opponent: ${snapshot.war.opponent}` : 'No active ranked war'), note(bosbot ? 'Order and reasons from BOSBOT. Missing battle stats remain unknown.' : 'Score ranks observed availability and history. Strength remains unknown.'), ...(rows.length ? rows : [note(snapshot.issues?.targets || 'No fresh, available targets')])];
 });

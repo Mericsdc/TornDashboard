@@ -1,3 +1,5 @@
+> Historical 0.3 integration. TornDashboard 0.4 uses personal Torn API + opt-in YATA and does not call or deploy these patches.
+
 # BOSBOT integration
 
 TornDashboard reads the BOSBOT browser-device API; it does not run an additional server or scrape Discord messages. Existing BOSBOT users share common stock/war/chain observations while personal flight and director data stay account scoped.

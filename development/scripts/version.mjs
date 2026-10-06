@@ -5,7 +5,7 @@ import { projectRoot, extensionRoot } from './extension-runtime.mjs';
 const version = process.argv[2];
 const current = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8')).version;
 const parts = value => value.split('.').map(Number);
-if (!/^\d+\.\d+\.\d+$/.test(version || '') || parts(version).some(part => part > 65535)) throw new Error('Use a Chrome-compatible version, for example npm run version:set -- 0.3.2');
+if (!/^\d+\.\d+\.\d+$/.test(version || '') || parts(version).some(part => part > 65535)) throw new Error('Use a Chrome-compatible version, for example npm run version:set -- 0.4.1');
 const firstDifference = parts(version).findIndex((part, index) => part !== parts(current)[index]);
 if (firstDifference < 0 || parts(version)[firstDifference] < parts(current)[firstDifference]) throw new Error(`Version must increase from ${current}`);
 const paths = ['package.json', 'packages/extension/manifest.json', ...(await readdir(join(projectRoot, 'packages'))).map(name => `packages/${name}/package.json`)];

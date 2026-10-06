@@ -1,5 +1,6 @@
-import { MODES, PRESETS, moveWidget, reconcileLayout, type Layout, type Mode, type PublicState, type Settings, type Snapshot, type WidgetId } from '@tcd/shared';
+import { MODES, PRESETS, moveWidget, presetLayout, reconcileLayout, type Layout, type Mode, type PublicState, type Settings, type Snapshot, type WidgetId } from '@tcd/shared';
 import type { DashboardStore } from '../services/storage';
+import { TravelDock } from './travel-dock';
 import { Panels } from './panels';
 import { TornObserver } from './torn-observer';
 import { DragDrop } from './drag-drop';
@@ -13,6 +14,7 @@ import css from '../styles/dashboard.css';
 export class Dashboard {
   readonly events = new EventBus();
   private panels: Panels;
+  private dock: TravelDock;
   private observer: TornObserver;
   private manager: WidgetManager;
   private drag: DragDrop;
@@ -33,15 +35,16 @@ export class Dashboard {
     this.panels = new Panels(css, value => {
       if (MODES.includes(value as Mode)) void this.changeSettings({ mode: value as Mode, autoSwitching: false });
     }, () => { void store.openOptions().catch(error => this.error(error)); });
+    this.dock = new TravelDock(css);
     this.manager = new WidgetManager(this.panels, createRegistry(), (id, direction) => this.move(id, direction));
     this.drag = new DragDrop(this.panels.left, this.panels.right, state.settings.animation, layout => { this.persistLayout(layout); });
-    this.observer = new TornObserver(this.panels, () => this.state.settings.panelWidth, () => this.render());
+    this.observer = new TornObserver(this.panels, this.dock.host, () => this.state.settings.panelWidth, () => this.render());
     this.unsubscribe = store.subscribe(refreshData => {
       if (refreshData) { this.snapshot = null; this.refreshGeneration++; this.pending = false; }
       void this.reload().then(() => { if (refreshData) void this.refresh(); }).catch(error => this.error(error));
     });
     this.events.on('error', message => { this.panels.error.hidden = false; this.panels.error.textContent = message; });
-    this.tick = setInterval(() => { if (!this.drag.dragging) this.manager.update(this.context()); void this.store.checkAlerts?.().catch(error => this.error(error)); }, 1000);
+    this.tick = setInterval(() => { if (!this.drag.dragging) this.manager.update(this.context()); this.dock.update(this.context()); void this.store.checkAlerts?.().catch(error => this.error(error)); }, 1000);
     this.polling = setInterval(() => { void this.refresh(); }, 15000);
     this.render(); void this.refresh();
   }
@@ -52,7 +55,7 @@ export class Dashboard {
   }
   private async reload(): Promise<void> {
     const next = await this.store.load(); if (this.destroyed) return;
-    const sourceChanged = next.settings.dataSource !== this.state.settings.dataSource || next.settings.mockScenario !== this.state.settings.mockScenario || next.settings.backendUrl !== this.state.settings.backendUrl || next.settings.bosbotUrl !== this.state.settings.bosbotUrl;
+    const sourceChanged = next.settings.dataSource !== this.state.settings.dataSource || next.settings.mockScenario !== this.state.settings.mockScenario || next.settings.backendUrl !== this.state.settings.backendUrl || next.settings.stockProvider !== this.state.settings.stockProvider;
     this.state = next;
     if (next.settings.rememberPositions) this.layouts = structuredClone(next.layouts);
     if (sourceChanged) { this.snapshot = null; this.refreshGeneration++; this.pending = false; }
@@ -65,41 +68,29 @@ export class Dashboard {
     if (nextMode !== this.mode) { this.mode = nextMode; this.events.emit('mode', nextMode); }
     this.panels.apply({ ...this.state.settings, mode: this.mode }); this.drag.animation(this.state.settings.animation);
     this.panels.mode.title = this.state.settings.autoSwitching ? 'Automatic mode; choosing a preset switches to manual' : 'Manual preset';
-    this.panels.status.textContent = this.snapshot?.source === 'mock' ? 'MOCK' : this.snapshot?.provider === 'bosbot' ? 'BOSBOT' : this.snapshot?.source === 'live' ? 'LIVE' : 'NO DATA';
-    this.manager.reconcile(reconcileLayout(this.layouts[this.mode], PRESETS[this.mode]), this.context());
+    this.panels.status.textContent = this.snapshot?.source === 'mock' ? 'MOCK' : this.snapshot?.provider === 'torn' ? 'TORN API' : this.snapshot?.source === 'live' ? 'LIVE' : 'NO DATA';
+    this.manager.reconcile(presetLayout(this.layouts[this.mode], this.mode), this.context()); this.dock.update(this.context());
     this.quickSettings(); this.observer.schedule();
   }
   private quickSettings(): void {
-    const signature = JSON.stringify(this.state.settings) + this.mode;
-    if (signature === this.quickSignature) return; this.quickSignature = signature;
-    const controls: HTMLElement[] = [];
-    for (const [name, label, min, max, step] of [['panelWidth', 'Width', 220, 420, 10], ['opacity', 'Opacity', 0.55, 1, 0.01], ['gap', 'Gap', 4, 24, 1]] as const) {
-      const row = el('label', 'setting-row', `${label} `); const input = el('input'); input.type = 'range'; input.min = String(min); input.max = String(max); input.step = String(step); input.value = String(this.state.settings[name]); input.setAttribute('aria-label', label);
-      const output = el('output', '', input.value); input.addEventListener('input', () => { output.value = input.value; });
-      input.addEventListener('change', () => { void this.changeSettings({ [name]: Number(input.value) }); }); row.append(input, output); controls.push(row);
+    const signature=JSON.stringify(this.state.settings)+this.mode;
+    if(signature===this.quickSignature)return;this.quickSignature=signature;
+    const draft=structuredClone(this.state.settings),controls:HTMLElement[]=[];
+    for(const [name,label,min,max,step] of [['panelWidth','Width',220,420,10],['opacity','Opacity',0.55,1,0.01],['gap','Gap',4,24,1]] as const){
+      const row=el('label','setting-row',label),input=el('input');input.type='range';input.min=String(min);input.max=String(max);input.step=String(step);input.value=String(draft[name]);input.setAttribute('aria-label',label);const output=el('output','',input.value);
+      input.addEventListener('input',()=>{draft[name]=Number(input.value);output.value=input.value;});row.append(input,output);controls.push(row);
     }
-    for (const [name, label] of [['autoSwitching', 'Automatic mode switching'], ['rememberPositions', 'Remember positions'], ['animation', 'Animations']] as const) {
-      const row = el('label', 'setting-row'); const input = el('input'); input.type = 'checkbox'; input.checked = this.state.settings[name]; input.addEventListener('change', () => { void this.changeSettings({ [name]: input.checked }); }); row.append(input, el('span', '', label)); controls.push(row);
+    for(const [name,label] of [['autoSwitching','Automatic mode switching'],['rememberPositions','Remember positions'],['animation','Animations']] as const){const row=el('label','setting-row'),input=el('input');input.type='checkbox';input.checked=draft[name];input.addEventListener('change',()=>{draft[name]=input.checked;});row.append(input,el('span','',label));controls.push(row);}
+    for(const [name,values] of [['density',['compact','comfortable']],['theme',['liquid-glass','torn-dark','slate']]] as const){const row=el('label','setting-row',name),select=el('select');select.setAttribute('aria-label',name);values.forEach(value=>{const option=el('option','',value);option.value=value;select.append(option);});select.value=draft[name];select.addEventListener('change',()=>{if(name==='density')draft.density=select.value as Settings['density'];else draft.theme=select.value as Settings['theme'];});row.append(select);controls.push(row);}
+    const widgets=el('details');widgets.append(el('summary','','Widgets in this preset'));let layout=structuredClone(this.layouts[this.mode]);const mode=this.mode;
+    const allowed=new Set([...PRESETS[mode].left,...PRESETS[mode].right,...(mode==='TRAVEL'?['travel-market','travel-profit']:[])]);
+    for(const definition of createRegistry().all()){
+      if(!allowed.has(definition.id))continue;
+      const row=el('label','setting-row'),input=el('input');input.type='checkbox';input.checked=!draft.disabledWidgets.includes(definition.id);
+      input.addEventListener('change',()=>{draft.disabledWidgets=draft.disabledWidgets.filter(id=>id!==definition.id);if(!input.checked)draft.disabledWidgets.push(definition.id);});row.append(input,el('span','',definition.title));widgets.append(row);
     }
-    for (const [name, values] of [['density', ['compact', 'comfortable']], ['theme', ['liquid-glass', 'torn-dark', 'slate']]] as const) {
-      const row = el('label', 'setting-row', `${name} `); const select = el('select'); select.setAttribute('aria-label', name);
-      values.forEach(value => { const option = el('option', '', value); option.value = value; select.append(option); }); select.value = this.state.settings[name];
-      select.addEventListener('change', () => { void this.changeSettings({ [name]: select.value } as Partial<Settings>); }); row.append(select); controls.push(row);
-    }
-    const widgets = el('details'); widgets.append(el('summary', '', 'Widgets in this preset'));
-    for (const definition of createRegistry().all()) {
-      const row = el('label', 'setting-row'); const input = el('input'); input.type = 'checkbox';
-      input.checked = [...this.layouts[this.mode].left, ...this.layouts[this.mode].right].includes(definition.id) && !this.state.settings.disabledWidgets.includes(definition.id);
-      input.addEventListener('change', () => {
-        const layout = structuredClone(this.layouts[this.mode]);
-        if (input.checked && ![...layout.left, ...layout.right].includes(definition.id)) layout[definition.defaultPosition].push(definition.id);
-        this.persistLayout(layout);
-        const disabled = this.state.settings.disabledWidgets.filter(id => id !== definition.id);
-        if (!input.checked) disabled.push(definition.id);
-        void this.changeSettings({ disabledWidgets: disabled });
-      }); row.append(input, el('span', '', definition.title)); widgets.append(row);
-    }
-    controls.push(widgets, button('Reset current preset', () => { this.layouts[this.mode] = structuredClone(PRESETS[this.mode]); this.persistLayout(structuredClone(PRESETS[this.mode])); void this.changeSettings({ disabledWidgets: [] }); }));
+    const message=el('p','muted','Changes apply when you save.');
+    controls.push(widgets,button('Reset current preset',()=>{layout=structuredClone(PRESETS[mode]);draft.disabledWidgets=[];message.textContent='Preset reset. Save to apply.';}),button('Save settings',()=>{void(async()=>{try{await this.store.settings({panelWidth:draft.panelWidth,opacity:draft.opacity,gap:draft.gap,density:draft.density,theme:draft.theme,animation:draft.animation,autoSwitching:draft.autoSwitching,rememberPositions:draft.rememberPositions,disabledWidgets:draft.disabledWidgets});await this.store.layout(mode,presetLayout(layout,mode));this.quickSignature='';await this.reload();this.panels.settings.append(el('p','save-confirmation','Settings saved'));}catch(error){this.error(error);}})();}),message);
     this.panels.settings.replaceChildren(...controls);
   }
   private async changeSettings(patch: Partial<Settings>): Promise<void> {
@@ -108,7 +99,7 @@ export class Dashboard {
   private persistLayout(visible: Layout): void {
     const mode = this.mode;
     // Hidden widgets keep their prior side and are appended without discarding their records.
-    const full = reconcileLayout(visible, this.layouts[mode]); this.layouts[mode] = full; this.quickSignature = ''; this.render(); this.events.emit('layout', undefined);
+    const full = presetLayout(reconcileLayout(visible, this.layouts[mode]), mode); this.layouts[mode] = full; this.quickSignature = ''; this.render(); this.events.emit('layout', undefined);
     if (!this.state.settings.rememberPositions) return;
     this.saveQueue = this.saveQueue.then(() => this.store.layout(mode, full)).catch(error => this.error(error));
   }
@@ -122,13 +113,14 @@ export class Dashboard {
     try {
       const snapshot = await this.store.snapshot(); if (this.destroyed || generation !== this.refreshGeneration) return;
       this.snapshot = snapshot; this.panels.error.hidden = true; this.render();
-      const issues = Object.entries(snapshot.issues || {}).map(([section, message]) => `${section}: ${message}`);
+      const relevant = this.mode === 'WAR' ? ['war','chain','targets','profile'] : this.mode === 'TRAVEL' ? ['travel','stocks','prices','profile'] : this.mode === 'CUSTOM' ? Object.keys(snapshot.issues || {}) : ['chain','company','profile',...(this.state.favorites.length ? ['stocks','prices'] : [])];
+      const issues = Object.entries(snapshot.issues || {}).filter(([section]) => relevant.includes(section)).map(([section, message]) => `${section}: ${message}`);
       if (issues.length) this.error(issues.join(' · '));
     } catch (error) { if (generation === this.refreshGeneration) { this.snapshot = null; this.render(); this.error(error); } }
     finally { if (generation === this.refreshGeneration) this.pending = false; }
   }
   private error(error: unknown): void { this.events.emit('error', error instanceof Error ? error.message : 'Unable to save or refresh'); }
   destroy(): void {
-    this.destroyed = true; clearInterval(this.tick); clearInterval(this.polling); this.unsubscribe(); this.observer.destroy(); this.drag.destroy(); this.manager.destroy(); this.panels.destroy(); this.events.destroy();
+    this.destroyed = true; clearInterval(this.tick); clearInterval(this.polling); this.unsubscribe(); this.observer.destroy(); this.drag.destroy(); this.manager.destroy(); this.panels.destroy(); this.dock.destroy(); this.events.destroy();
   }
 }

@@ -9,6 +9,8 @@ export class Panels {
   readonly mode = el('select');
   readonly status = el('span', 'source-badge', 'Loading');
   readonly error = el('p', 'error');
+  readonly arrange = el('button', '', 'Arrange');
+  readonly rightHeading = el('div', 'panel-heading');
   readonly settings = el('div', 'quick-settings');
   constructor(css: string, onMode: (mode: string) => void, onOptions: () => void) {
     this.host.id = 'tcd-dashboard'; this.root = this.host.attachShadow({ mode: 'open' });
@@ -22,14 +24,17 @@ export class Panels {
     const settingsButton = button('⚙', () => { this.settings.hidden = !this.settings.hidden; }); settingsButton.setAttribute('aria-label', 'Panel settings');
     const options = button('Options ↗', onOptions);
     toolbar.append(this.mode, settingsButton, options); this.settings.hidden = true; this.error.hidden = true;
-    const heading = el('div', 'panel-heading'); heading.append(el('strong', '', 'TRAVEL & PERSONAL'), el('span', 'muted', 'Drag to arrange'));
+    const heading = this.rightHeading; heading.append(el('strong', '', 'PERSONAL'));
+    this.arrange.type='button';this.arrange.setAttribute('aria-label','Arrange widgets');this.arrange.setAttribute('aria-pressed','false');
+    this.arrange.addEventListener('click',()=>{const editing=this.dashboard.dataset.editing!=='true';this.dashboard.dataset.editing=String(editing);this.arrange.textContent=editing?'Done':'Arrange';this.arrange.setAttribute('aria-pressed',String(editing));});
+    toolbar.append(this.arrange);
     left.append(title, toolbar, this.settings, this.error, this.left); right.append(heading, this.right);
     this.left.dataset.side = 'left'; this.right.dataset.side = 'right'; this.dashboard.append(left, right); this.root.append(style, this.dashboard);
   }
   apply(settings: Settings): void {
     this.host.style.setProperty('--panel-width', `${settings.panelWidth}px`); this.host.style.setProperty('--panel-opacity', String(settings.opacity));
     this.host.style.setProperty('--widget-gap', `${settings.gap}px`); this.dashboard.dataset.theme = settings.theme;
-    this.dashboard.dataset.density = settings.density; this.dashboard.dataset.animation = String(settings.animation); this.mode.value = settings.mode;
+    this.dashboard.dataset.density = settings.density; this.dashboard.dataset.animation = String(settings.animation); this.mode.value = settings.mode; this.rightHeading.textContent = settings.mode === 'WAR' ? 'TARGETS' : settings.mode === 'TRAVEL' ? 'WATCHED PRODUCTS' : settings.mode === 'CUSTOM' ? 'CUSTOM' : 'PERSONAL';
   }
   destroy(): void { this.host.remove(); }
 }

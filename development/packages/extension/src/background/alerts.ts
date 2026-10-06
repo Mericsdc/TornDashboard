@@ -22,7 +22,7 @@ async function deliverAlerts(snapshot: Snapshot, state: PublicState, scope: stri
       ...(state.settings.alerts.sound ? [playWarning()] : [])
     ]);
     const failed = outcomes.some(result => result.status === 'rejected');
-    await chrome.storage.local.set({ alertDelivery: { at: Date.now(), title: event.title, failed } });
+    await chrome.storage.local.set({ alertDelivery: { at: Date.now(), title: event.title, failed, notificationFailed: outcomes[0]?.status === 'rejected', soundFailed: outcomes[1]?.status === 'rejected', reason: outcomes.filter((result): result is PromiseRejectedResult => result.status === 'rejected').map(result => result.reason instanceof Error ? result.reason.message : 'Alert delivery unavailable').join(' · ').slice(0,200) } });
   }
   const chain = snapshot.chain, now = Date.now();
   const warnAt = chain?.expiresAt ? chain.expiresAt - 30000 : 0;

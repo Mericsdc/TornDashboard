@@ -27,4 +27,5 @@ scenario.addEventListener('change', () => { void store.settings({ mockScenario: 
 document.querySelector('#replace-main')!.addEventListener('click', () => {
   const main = document.querySelector('main')!; main.replaceWith(main.cloneNode(true));
   document.querySelector('#tcd-dashboard')?.remove(); history.pushState({}, '', '?sid=travel');
+  void store.settings({mockScenario:'travel',autoSwitching:true});
 });

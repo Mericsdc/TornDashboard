@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TornDashboard",
-  "version": "0.3.2",
-  "description": "Draggable war and travel widgets powered by your BOSBOT account.",
+  "version": "0.4.0",
+  "description": "Personal Torn API dashboard with travel shopping, bag profit and war widgets.",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",
@@ -13,14 +13,10 @@
   "host_permissions": [
     "https://www.torn.com/*",
     "https://torn.com/*",
-    "http://127.0.0.1:4318/*",
-    "http://localhost:4318/*",
-    "https://lrx-server.tail2b0396.ts.net/*"
+    "https://api.torn.com/*"
   ],
   "optional_host_permissions": [
-    "https://*/*",
-    "http://127.0.0.1:8765/*",
-    "http://localhost:8765/*"
+    "https://yata.yt/*"
   ],
   "background": {
     "service_worker": "service-worker.js",

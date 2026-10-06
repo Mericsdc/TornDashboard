@@ -1,61 +1,50 @@
 # TornDashboard
 
-BOSBOT verileriyle çalışan, Liquid Glass temalı Manifest V3 Chrome eklentisi. Savaş, hedefler, hospital, chain, ülkeye göre ürün/stok/kâr, favoriler, restock ve şirket direktörleri için addiction etkisi gösterir. TypeScript kaynakları, testler ve güncelleme araçları aynı proje içindedir.
+Kişisel Torn API anahtarıyla çalışan, Liquid Glass görünümlü Manifest V3 Chrome eklentisi. Seyahat, ülkeye ait ürünler, alışveriş planı, favori stok uyarıları ve savaş hedeflerini gösterir. Stok gözlemleri isteğe bağlı, hesap gerektirmeyen YATA servisinden gelir. BOSBOT üyeliği veya sunucu bağlantısı gerekmez.
 
-## Chrome’a yükleme
+## Chrome’da güncelleme ve bağlantı
 
-`chrome://extensions` → **Developer mode** → **Load unpacked** → bu klasörü seç. Seçtiğin klasörde `manifest.json` bulunmalıdır; `development` klasörünü seçme. Options → **Connect BOSBOT account** ile sunucuda hesabını eşleştir.
+Mevcut kurulumun **klasör yolunu koru**: `outputs/torn-companion-extension` sabit kalır. `chrome://extensions` → mevcut **TornDashboard** kartında **Reload** → Torn sekmelerini yenile. İlk kurulumda Developer mode → Load unpacked → bu kök klasörü seç (`development` değil).
 
-Mevcut kurulumun klasör yolu korunmuştur: `outputs/torn-companion-extension`. Eklentinin Chrome’daki adı **TornDashboard** olur. Bu klasörü taşımadan aynı dosyaları güncelleyeceğiz. Böylece Chrome kimliği, BOSBOT bağlantısı, favoriler ve panel düzenleri korunur. Güncellemeden sonra Chrome’daki eklenti kartında **Reload**’a basıp Torn sekmelerini yenile.
+Options → **Personal Torn API** bölümüne kendi anahtarını gir → **Connect Torn API**. Anahtarı sohbet/GitHub’a gönderme. Minimal erişim seyahat ve herkese açık faction verilerini kapsar. Direktör çalışan verileri için Limited veya uygun custom company izinleri gerekir. **Use YATA shared stock observations** seçeneğini aç → **Save settings**; Chrome’un YATA erişim isteğini kabul et. Anahtar yalnızca Torn’a gönderilir.
 
-## Bundan sonraki güncellemeler
+“Remember on this browser” açıkken anahtar güvenilir extension storage’da kalır; kapalıyken Chrome kapanınca silinir. Storage şifreli bir kasa değildir. **Remove API key** ile kaldırabilirsin. Eski BOSBOT bağlantısı yerel olarak silinir; favoriler ve görünüm tercihleri korunur. Eski presetlerdeki ek widgetlar CUSTOM düzenine aktarılır. İstenirse eski bot tarayıcı yetkisi botun kendi panelinden ayrıca iptal edilebilir.
 
-Node.js 24 ve npm kurulu olmalıdır. Komutları bu projenin kök klasöründe çalıştır:
+## Kullanım
+
+- **WAR:** yalnızca Chain ve Recommended Targets. Aktif ranked war’ın rakip faction’ı Torn API’den otomatik yüklenir. Hospital/seyahat durumları hedef sıralamasında dikkate alınır. Battle stats ve fair fight verisi yoksa `unknown` kalır.
+- **TRAVEL:** seyahat durumu, destinasyona ait takip edilen ürünler ve restock. **Travel Market + Travel Profit Calculator** uçuş panelinin altında yer alır. Chain gösterilmez. Dönüşte “Dubai → Torn” rotası UAE ürünlerine eşlenir; bilinmeyen destinasyon başka ülkelerin ürünlerini açmaz.
+- **NORMAL:** chain, gruplu favoriler/restock ve doğrulanmış şirket direktörüne çalışan addiction verimlilik etkisi.
+- **CUSTOM:** widgetları serbest seç; seyahat hesaplayıcısı aktif seyahat koşulunu korur.
+
+**Arrange** ile sürükleme/taşıma kontrollerini aç; **Done** ile kapat. Her preset kendi sıralamasını hatırlar. Comfortable yalnızca boşluk ve okunabilirliği artırır. İstenen genişlik boş alanın boyutuna uyarlanır; 340 px yer bulamazsa panel daralır. Gerekirse tek kenarda sıralanır; dar ekranda sayfanın üstüne geçer.
+
+⚙ içindeki ayarlar **Save settings** ile uygulanır. Options’da da ayrı kayıt düğmesi vardır. Ürün arama, kategori, stokta olanlar, favoriler ve sıralama filtreleri kalıcıdır. Takip edilen ürünler ülke ve ürün türüne göre gruplanır; stok eşiği/uyarı her ürün için düzenlenir.
+
+Hesaplayıcıya **kalan boş çanta kapasitesini** gir. Torn API bu alanı sağlamaz; kapasite tahmin edilmez. İsteğe bağlı bütçe, satış ücreti ve favori tercihiyle **Optimize Bag** güncel stoklara göre ürün/adet planı çıkarır. Cost, Torn value, tahmini kâr ve saatlik kâr gösterilir. Tur süresi girilmezse mevcut uçuş süresinin iki katı **tahmini** tur olarak etiketlenir; alışveriş beklemesi ve seyahat giderleri hariçtir. Torn value kesin satış fiyatı değildir.
+
+YATA stokları ortak gözlemdir; üç dakikadan eski stok `unknown` olur. Restock için en az üç gözlenen sıfır→pozitif geçiş gerekir; yeterli geçmiş yoksa zaman uydurulmaz. Chain 30 saniyeye geldiğinde ses ve Chrome bildirimi; takip edilen stok eşik altından üstüne geçtiğinde stok uyarısı vardır. Chrome açık/uyanık olmalıdır. **Test warning sound** ile sesi kontrol et.
+
+## Geliştirme ve aynı klasöre güncelleme
+
+Node.js **24.x** ve npm. Komutları bu kökte çalıştır:
 
 ```sh
-git pull --ff-only
 npm run setup
-npm run update
-```
-
-`update`, lint/typecheck/test kontrollerinden sonra aynı klasördeki eklentiyi yeniler. Build önce geçici bir klasörde tamamlanır ve doğrulanır; başarısız derleme kurulu dosyaları değiştirmez. Eklentiyi kaldırıp tekrar kurmak gerekmez. BOSBOT hesabı ve düzen Chrome storage’da kalır.
-
-Chrome’a klasörden yüklenen eklentiler GitHub’dan kendiliğinden güncellenmez. Normal macOS/Windows kullanıcıları için otomatik dağıtım, aynı **Chrome Web Store** kaydına yeni sürüm yüklenerek yapılır. GitHub sürümleri bu yayın için hazır paket üretir. [Chrome dağıtım kuralları](https://developer.chrome.com/docs/extensions/how-to/distribute).
-
-## Tek sürüm paketi
-
-```sh
-npm run package
-```
-
-Her seferinde **`development/dist/TornDashboard.zip`** ve `SHA256SUMS` yenilenir. ZIP’te yalnızca 11 eklenti dosyası vardır; kaynaklar, testler, backend ve yerel gizli dosyalar dahil edilmez. ZIP’i doğrudan Chrome Web Store geliştirici paneline yüklemek veya başka bir bilgisayarda sabit bir klasöre açmak için kullanabilirsin. Mevcut kurulumun üzerine güncellerken klasör yolunu koru.
-
-Yeni sürüm hazırlamak için:
-
-```sh
-npm run version:set -- 0.3.3
 npm run update
 npm run test:e2e
 npm run package
-git add .
-git commit -m "Release TornDashboard 0.3.3"
-git push
-git tag v0.3.3
-git push origin v0.3.3
 ```
 
-Sürüm komutu tüm paket/manifest sürümlerini birlikte artırır. GitHub Actions kodu kontrol eder, gerçek Chromium testlerini çalıştırır ve `v*` etiketi için **TornDashboard.zip** adlı release dosyasını oluşturur. Chrome Web Store’a yayın için geliştirici hesabında aynı mağaza kaydı kullanılmalıdır. Mağaza kimliği mevcut unpacked kimliğinden farklı olabilir; ilk mağaza geçişinde yeniden BOSBOT eşlemesi gerekebilir.
+`update` lint/typecheck/test/build yapıp aynı kurulu klasörü yeniler. Başarısız build kurulu dosyaları değiştirmez. Tek paket **`development/dist/TornDashboard.zip`** ve `SHA256SUMS` aynı adlarla yenilenir. ZIP’te yalnızca 11 çalışma dosyası vardır; kaynak/backend/.env/anahtarlar yer almaz.
 
-## Proje
+```sh
+npm run dev:extension
+npm run preview
+```
 
-- Kök: Chrome’un yüklediği tek eklenti ve Git deposu.
-- `development/packages/extension`: Vanilla TypeScript/CSS widget ve güvenli service worker kaynakları.
-- `development/packages/shared`: veri sözleşmeleri, filtre/kâr/uyarı mantığı.
-- `development/packages/backend`: ilk tasarımdan kalan isteğe bağlı Node 24 geliştirme backend’i; canlı eklenti BOSBOT’a bağlanır.
-- `development/tests`: domain/API ve gerçek MV3 tarayıcı testleri.
-- `development/integrations/bosbot`: BOSBOT sunucu entegrasyon değişikliklerinin kaynak yamaları.
-- `.github/workflows`: doğrulama ve tek ZIP release akışı.
+`http://127.0.0.1:4319/?sid=travel` etiketli MOCK görsel demodur. Gerçek veriler yüklenen Chrome eklentisinde kullanılır. Kaynak/testler `development` altındadır. İsteğe bağlı Fastify/PostgreSQL/Redis geliştirme servisi canlı eklentinin veri yolunda değildir.
 
-[Özellikler ve geliştirme ayrıntıları](development/README.md) · [Güvenlik](development/docs/SECURITY.md) · [Doğrulama](development/docs/VERIFICATION.md).
+GitHub’dan yeni kodu almak: `git pull --ff-only`, `npm run setup`, `npm run update`; sonra Chrome Reload. Yeni sürüm: `npm run version:set -- 0.4.1`, kontroller, commit/push ve eşleşen `v0.4.1` etiketi. GitHub Actions doğrulayıp **TornDashboard.zip** release dosyasını oluşturur. Unpacked eklenti GitHub’dan otomatik güncellenmez; mağaza üzerinden otomatik dağıtım için aynı Chrome Web Store kaydı kullanılmalıdır.
 
-Canlı veriler yalnızca BOSBOT’tan gelir. API anahtarı sayfaya veya Git deposuna taşınmaz. Bilinmeyen battle stats/fiyatlar `unknown`, restock tahminleri `estimated` olarak gösterilir. Yerel `npm run preview` sayfası açıkça etiketlenmiş mock demodur.
+[Kaynak mimarisi](development/docs/ARCHITECTURE.md) · [Güvenlik](development/docs/SECURITY.md) · [Doğrulama](development/docs/VERIFICATION.md) · [Torn API resmi sözleşmesi](https://www.torn.com/swagger.php) · [YATA ortak stok servisi](https://yata.yt/api/v1/travel/export/)
