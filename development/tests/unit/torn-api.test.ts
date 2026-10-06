@@ -78,8 +78,9 @@ describe('direct Torn API adapter',()=>{
     const contains=vi.fn().mockResolvedValue(false),request=vi.fn().mockResolvedValue(false);vi.stubGlobal('chrome',{permissions:{contains,request}});
     try{await expect(requireTornAccess()).rejects.toThrow('Chrome has blocked');await expect(requestTornAccess()).rejects.toThrow('Chrome has blocked');expect(request).toHaveBeenCalledWith({origins:['https://api.torn.com/*']});contains.mockResolvedValue(true);await expect(requireTornAccess()).resolves.toBeUndefined();}finally{vi.unstubAllGlobals();}
   });
-  it('returns unknown stock on stale, future, absent or wrong-country observations',()=>{
-    for(const at of [now/1000-181,now/1000+31])expect(joinStocks([item()],{stocks:{uae:{update:at,stocks:[{id:1,quantity:15}]}}},now,{})[0]?.stock).toBeNull();
+  it('keeps old stock observations labelled by age while rejecting future and wrong-country data',()=>{
+    expect(joinStocks([item()],{stocks:{uae:{update:now/1000-181,stocks:[{id:1,quantity:15}]}}},now,{})[0]?.stock).toBe(15);
+    for(const at of [now/1000+31])expect(joinStocks([item()],{stocks:{uae:{update:at,stocks:[{id:1,quantity:15}]}}},now,{})[0]?.stock).toBeNull();
     expect(joinStocks([item()],{stocks:{jap:{update:now/1000,stocks:[{id:1,quantity:50}]}}},now,{})[0]?.stock).toBeNull();
   });
   it('requests private employee effects only for the key owner verified as director',async()=>{

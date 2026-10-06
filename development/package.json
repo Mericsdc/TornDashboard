@@ -1,6 +1,6 @@
 {
   "name": "torndashboard-development",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -52,5 +52,8 @@
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.44.0",
     "vitest": "^5.0.3"
+  },
+  "overrides": {
+    "shell-quote": "1.12.0"
   }
 }

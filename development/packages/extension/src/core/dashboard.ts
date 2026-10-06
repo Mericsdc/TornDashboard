@@ -39,8 +39,9 @@ export class Dashboard {
     this.manager = new WidgetManager(this.panels, createRegistry(), (id, direction) => this.move(id, direction));
     this.drag = new DragDrop(this.panels.left, this.panels.right, state.settings.animation, layout => { this.persistLayout(layout); });
     this.observer = new TornObserver(this.panels, this.dock.host, () => this.state.settings.panelWidth, () => this.render());
-    this.unsubscribe = store.subscribe(refreshData => {
-      if (refreshData) { this.snapshot = null; this.refreshGeneration++; this.pending = false; }
+    this.unsubscribe = store.subscribe((refreshData, clearAccount) => {
+      if (clearAccount) this.snapshot = null;
+      if (refreshData) { this.refreshGeneration++; this.pending = false; }
       void this.reload().then(() => { if (refreshData) void this.refresh(); }).catch(error => this.error(error));
     });
     this.events.on('error', message => { this.panels.error.hidden = false; this.panels.error.textContent = message; });
@@ -51,14 +52,14 @@ export class Dashboard {
   static async mount(store: DashboardStore): Promise<Dashboard> { return new Dashboard(store, await store.load()); }
   private context(): WidgetContext {
     return { state: this.state, snapshot: this.snapshot, now: Date.now(), mode: this.mode,
-      saveSettings: patch => this.changeSettings(patch), saveFavorites: async favorites => { try { this.state = await this.store.favorites(favorites); this.render(); } catch (error) { this.error(error); } } };
+      openOptions: () => this.store.openOptions(), saveSettings: patch => this.changeSettings(patch), saveFavorites: async favorites => { try { this.state = await this.store.favorites(favorites); this.render(); } catch (error) { this.error(error); } } };
   }
   private async reload(): Promise<void> {
     const next = await this.store.load(); if (this.destroyed) return;
     const sourceChanged = next.settings.dataSource !== this.state.settings.dataSource || next.settings.mockScenario !== this.state.settings.mockScenario || next.settings.backendUrl !== this.state.settings.backendUrl || next.settings.stockProvider !== this.state.settings.stockProvider;
     this.state = next;
     if (next.settings.rememberPositions) this.layouts = structuredClone(next.layouts);
-    if (sourceChanged) { this.snapshot = null; this.refreshGeneration++; this.pending = false; }
+    if (sourceChanged) { if (next.settings.dataSource !== 'torn') this.snapshot = null; this.refreshGeneration++; this.pending = false; }
     this.render(); if (sourceChanged) void this.refresh();
   }
   private render(): void {
@@ -114,12 +115,12 @@ export class Dashboard {
       const snapshot = await this.store.snapshot(); if (this.destroyed || generation !== this.refreshGeneration) return;
       this.snapshot = snapshot; this.panels.error.hidden = true; this.render();
       const relevant = this.mode === 'WAR' ? ['war','chain','targets','profile'] : this.mode === 'TRAVEL' ? ['travel','stocks','prices','profile'] : this.mode === 'CUSTOM' ? Object.keys(snapshot.issues || {}) : ['chain','company','profile',...(this.state.favorites.length ? ['stocks','prices'] : [])];
-      const issues = Object.entries(snapshot.issues || {}).filter(([section]) => relevant.includes(section)).map(([section, message]) => `${section}: ${message}`);
+      const issues = Object.entries(snapshot.issues || {}).filter(([section]) => relevant.includes(section) && (section !== 'stocks' || this.state.settings.stockProvider !== 'off')).map(([section, message]) => `${section}: ${message}`);
       if (issues.length) this.error(issues.join(' · '));
-    } catch (error) { if (generation === this.refreshGeneration) { this.snapshot = null; this.render(); this.error(error); } }
+    } catch (error) { if (generation === this.refreshGeneration) { this.render(); this.error(error); } }
     finally { if (generation === this.refreshGeneration) this.pending = false; }
   }
-  private error(error: unknown): void { this.events.emit('error', error instanceof Error ? error.message : 'Unable to save or refresh'); }
+  private error(error: unknown): void { void error; this.events.emit('error', this.snapshot ? 'Showing saved data. Refreshing…' : 'Waiting for travel data…'); }
   destroy(): void {
     this.destroyed = true; clearInterval(this.tick); clearInterval(this.polling); this.unsubscribe(); this.observer.destroy(); this.drag.destroy(); this.manager.destroy(); this.panels.destroy(); this.dock.destroy(); this.events.destroy();
   }

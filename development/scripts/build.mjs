@@ -18,6 +18,7 @@ async function copyStatic() {
 const shared = { bundle: true, target: 'chrome120', sourcemap: false, minify: !watching, loader: { '.css': 'text' }, logLevel: 'info' };
 const dependencies = JSON.parse(await readFile('package.json', 'utf8')).dependencies;
 const configs = [
+  { ...shared, entryPoints: ['packages/extension/src/content/travel-page.ts'], outfile: `${staging}/travel-page.js`, format: 'iife' },
   { ...shared, entryPoints: ['packages/extension/src/offscreen/audio.ts'], outfile: `${staging}/offscreen.js`, format: 'iife' },
   { ...shared, entryPoints: ['packages/extension/src/core/bootstrap.ts'], outfile: `${staging}/content.js`, format: 'iife' },
   { ...shared, entryPoints: ['packages/extension/src/background/service-worker.ts'], outfile: `${staging}/service-worker.js`, format: 'esm' },

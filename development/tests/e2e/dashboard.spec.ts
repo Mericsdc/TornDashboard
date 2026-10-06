@@ -8,7 +8,7 @@ const fixture=async()=> (await readFile('packages/extension/demo/index.html','ut
 const launch=(profile:string)=>chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,viewport:{width:1680,height:1080},args:[`--disable-extensions-except=${resolve('..')}`,`--load-extension=${resolve('..')}`]});
 async function mockTorn(context:BrowserContext,state:{travel:boolean;director?:boolean;chainTimeout?:number}){
   const calls:string[]=[];
-  await context.route('https://www.torn.com/**',async route=>route.fulfill({body:await fixture(),contentType:'text/html'}));
+  await context.route('https://www.torn.com/**',async route=>route.fulfill({body:state.travel?(await fixture()).replace('Dubai to Torn','Torn to Dubai'):(await fixture()).replace(/<p>Dubai to Torn\. Remaining Flight Time[^<]*<\/p>/,''),contentType:'text/html'}));
   const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');
   await worker.evaluate(state=>{
     const testGlobal=globalThis as unknown as {fixtureCalls:string[];fetch:typeof fetch};testGlobal.fixtureCalls=[];
@@ -25,8 +25,8 @@ async function mockTorn(context:BrowserContext,state:{travel:boolean;director?:b
     const path=url.pathname.replace('/v2/','');testGlobal.fixtureCalls.push(path);
     const payloads:Record<string,unknown>={
       'key/info':{info:{user:{id:55,faction_id:10,company_id:state.director?88:null},access:{level:1,type:'Minimal'},selections:{}}},
-      'user/profile':{profile:{id:55,name:'Fixture player',level:40,status:{state:state.travel?'Traveling':'Okay',description:state.travel?'Traveling to Torn':'Okay'}}},
-      'user/travel':{travel:{destination:'Torn',departed_at:now-100,arrival_at:now+500,time_left:500}},
+      'user/profile':{profile:{id:55,name:'Fixture player',level:40,status:{state:state.travel?'Traveling':'Okay',description:state.travel?'Traveling to UAE':'Okay'}}},
+      'user/travel':{travel:{destination:state.travel?'UAE':'Torn',departed_at:now-100,arrival_at:state.travel?now+500:now-1,time_left:state.travel?500:0,method:'Airstrip'}},
       'faction/chain':{chain:{id:42,current:49,max:49,timeout:state.chainTimeout??120,start:now-500,end:0}},
       'faction/wars':{wars:{ranked:{war_id:8,start:now-10000,end:null,winner:null,target:1000,factions:[{id:10,name:'Our faction',score:450},{id:20,name:'Actual opponent',score:200}]}}},
       'faction/20/members':{members:[{id:123,name:'Opponent A',level:20,status:{state:'Okay',description:'Okay',until:null},last_action:{status:'Offline'}},{id:124,name:'Opponent hospital',level:30,status:{state:'Hospital',description:'Hospital',until:now+120},last_action:{status:'Online'}}]},
@@ -74,7 +74,7 @@ test('responsive preview, explicit save, separated arrangement and SPA dock reco
   await host.getByLabel('Arrange widgets',{exact:true}).click();await expect(host.getByLabel('Drag Chain',{exact:true})).toBeVisible();await host.getByLabel('Arrange widgets',{exact:true}).click();
   await page.reload();await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
   await page.getByRole('button',{name:'Simulate SPA navigation'}).click();await expect(host).toHaveCount(1);await expect(host.getByLabel('Dashboard preset')).toHaveValue('TRAVEL');await expect(host.locator('[data-widget-id="chain"]')).toHaveCount(0);
-  const dock=page.locator('#tcd-travel-dock');await expect(dock).toHaveCount(1);await expect(dock).toBeVisible();await expect(dock.locator('.widget-card')).toHaveCount(2);await expect(page.locator('main #tcd-travel-dock')).toHaveCount(1);
+  const dock=page.locator('#tcd-travel-dock');await expect(dock).toHaveCount(1);await expect(dock).toBeVisible();await expect(dock.locator('.widget-card')).toHaveCount(1);await expect(page.locator('main #tcd-travel-dock')).toHaveCount(1);
   await page.setViewportSize({width:760,height:900});await expect(host).toHaveAttribute('data-placement','inline');const main=await page.locator('main').boundingBox(),dashboard=await host.boundingBox();expect(dashboard!.y).toBeLessThan(main!.y);
 });
 
@@ -109,21 +109,20 @@ test('legacy BOS state migrates, saves dragging and keeps personal credentials o
   }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });
 
-test('personal API and YATA power only Dubai travel products, grouped watches and a bag optimizer',async()=>{
+test('personal API and YATA power only Dubai travel products, grouped watches and cached automatic capacity',async()=>{
   test.setTimeout(90000);const profile=await mkdtemp(join(tmpdir(),'torndashboard-travel-profile-')),context=await launch(profile);
   try{
     const calls=await mockTorn(context,{travel:true}),worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker'),id=new URL(worker.url()).hostname;
-    const state=defaultState();state.settings.stockProvider='yata';state.settings.bag.capacity=29;state.favorites=[{itemId:3,name:'Xanax',country:'Switzerland',minimumStock:1,alert:true}];
+    const state=defaultState();state.settings.stockProvider='yata';state.settings.travelCapacityOverride=29;state.favorites=[{itemId:3,name:'Xanax',country:'Switzerland',minimumStock:1,alert:true}];
     await worker.evaluate(async data=>{await chrome.storage.local.set(data);},{state,personalApiV4:true});
     const options=await context.newPage();await options.goto(`chrome-extension://${id}/options.html`);await options.getByLabel('Torn API key').fill(TEST_KEY);await options.getByRole('button',{name:'Connect Torn API',exact:true}).click();await expect(options.locator('#key-status')).toContainText('#55');
     const page=await context.newPage();await page.goto('https://www.torn.com/page.php?sid=travel');const host=page.locator('#tcd-dashboard'),dock=page.locator('#tcd-travel-dock');
     await expect(host.locator('.source-badge')).toHaveText('TORN API');await expect(host.getByLabel('Dashboard preset')).toHaveValue('TRAVEL');await expect(host.locator('[data-widget-id="chain"]')).toHaveCount(0);
-    const market=dock.locator('[data-widget-id="travel-market"]');await expect(market).toContainText('Automatically detected: UAE');await expect(market.locator('.market-product')).toHaveCount(2);await expect(market).not.toContainText('Xanax');await expect(market).not.toContainText('Monkey Plushie');
-    const calculator=dock.locator('[data-widget-id="travel-profit"]');await expect(calculator).toContainText('29 × Camel Plushie');await expect(calculator).toContainText('$84,100');await expect(page.locator('#travel-flight + #tcd-travel-dock')).toHaveCount(1);
+    const market=dock.locator('[data-widget-id="travel-market"]');await expect(market).toContainText('UAE');await expect(market.locator('.market-product')).toHaveCount(2);await expect(market).not.toContainText('Xanax');await expect(market).not.toContainText('Monkey Plushie');
+    await expect(dock.locator('[data-widget-id="travel-profit"]')).toHaveCount(0);await expect(market).toContainText('29 · manual');await expect(page.locator('#travel-flight + #tcd-travel-dock')).toHaveCount(1);
     await market.getByLabel('In stock only',{exact:true}).check();await expect(market.locator('.market-product')).toHaveCount(1);await market.getByLabel('In stock only',{exact:true}).uncheck();await market.getByLabel('Search products').fill('trib');await expect(market.locator('.market-product')).toHaveCount(1);await expect(market.getByLabel('Search products')).toHaveValue('trib');await expect(market.getByLabel('Search products')).toBeFocused();
     await market.getByLabel('Search products').fill('');await market.getByLabel('Watch Camel Plushie in UAE',{exact:true}).click();await expect(host.locator('[data-widget-id="travel-favorites"]')).toContainText('UAE');await expect(host.locator('[data-widget-id="travel-favorites"]')).not.toContainText('Switzerland');
     await options.reload();await expect(options.locator('#favorites .watch-country')).toHaveCount(2);await expect(options.locator('#favorites')).toContainText('Plushies');
-    await calculator.getByLabel('Available capacity',{exact:true}).fill('10');await calculator.getByRole('button',{name:'Optimize Bag',exact:true}).click();await expect(calculator).toContainText('10 × Camel Plushie');await page.reload();await expect(calculator.getByLabel('Available capacity',{exact:true})).toHaveValue('10');
     await options.getByRole('button',{name:'Test warning sound',exact:true}).click();await expect(options.locator('#status')).toContainText('Warning sound played');expect((await worker.evaluate(()=>chrome.runtime.getContexts({contextTypes:[chrome.runtime.ContextType.OFFSCREEN_DOCUMENT]}))).length).toBe(1);
     const second=await context.newPage();await second.goto('https://www.torn.com/page.php?sid=travel');await expect(second.locator('#tcd-dashboard .source-badge')).toHaveText('TORN API');expect((await calls.evaluate(()=> (globalThis as unknown as {fixtureCalls:string[]}).fixtureCalls)).filter(path=>path==='torn/items')).toHaveLength(1);
     const reply=await options.evaluate(async()=>chrome.runtime.sendMessage({type:'READ_STATE'}));expect(JSON.stringify(reply)).not.toContain(TEST_KEY);expect(await page.content()).not.toContain(TEST_KEY);
@@ -154,8 +153,8 @@ test('company addiction is director-only, while CUSTOM retains arbitrary widget 
     await expect(options.getByRole('heading',{name:'Appearance',exact:true})).toHaveCount(0);await expect(options.getByLabel('Panel width',{exact:true})).toHaveCount(0);await expect(options.getByRole('button',{name:'Reset appearance & layouts',exact:true})).toHaveCount(0);
     // Keep Options open while appearance changes on Torn, then save only Options-owned settings.
     await host.getByLabel('Panel settings').click();await host.getByLabel('Width',{exact:true}).fill('340');await host.getByLabel('density',{exact:true}).selectOption('comfortable');await host.getByLabel('theme',{exact:true}).selectOption('slate');await host.getByRole('button',{name:'Save settings',exact:true}).click();await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
-    await options.getByLabel('Selling fee %',{exact:true}).fill('2');await options.getByRole('button',{name:'Save settings',exact:true}).click();await expect(options.locator('#status')).toContainText('Settings saved');await expect(host.locator('.dashboard')).toHaveAttribute('data-density','comfortable');await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
-    const saved=await options.evaluate(async()=>chrome.runtime.sendMessage({type:'READ_STATE'}));expect(saved.data.settings.panelWidth).toBe(340);expect(saved.data.settings.bag.feePercent).toBe(2);await page.reload();await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
+    await options.getByLabel('Total capacity · one-time fallback',{exact:true}).fill('29');await options.getByRole('button',{name:'Save settings',exact:true}).click();await expect(options.locator('#status')).toContainText('Settings saved');await expect(host.locator('.dashboard')).toHaveAttribute('data-density','comfortable');await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
+    const saved=await options.evaluate(async()=>chrome.runtime.sendMessage({type:'READ_STATE'}));expect(saved.data.settings.panelWidth).toBe(340);expect(saved.data.settings.travelCapacityOverride).toBe(29);await page.reload();await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
     await host.getByLabel('Dashboard preset').selectOption('WAR');await expect(host.locator('.widget-card')).toHaveCount(2);await expect(host.locator('[data-widget-id="company-addiction"]')).toHaveCount(0);
   }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });

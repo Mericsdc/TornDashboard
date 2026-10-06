@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS: Settings = {
   dataSource: 'torn', mockScenario: 'normal', weights: DEFAULT_WEIGHTS, disabledWidgets: [],
   bosbotUrl: 'https://lrx-server.tail2b0396.ts.net:8443',
   stockProvider: 'off', bag: { capacity: null, budget: null, roundTripMinutes: null, feePercent: 0, favoritesOnly: false },
+  travelCapacityOverride: null,
   backendUrl: 'http://127.0.0.1:4318'
 };
 export const DEFAULT_FAVORITES: Favorite[] = [];

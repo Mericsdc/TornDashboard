@@ -1,33 +1,44 @@
-import { marketRows, optimizeBag, travelCountry, type Settings } from '@tcd/shared';
-import type { WidgetContext, WidgetDefinition } from '../../core/widget-registry';
-import { button, el, note, stat } from '../../core/dom';
-import { money } from '../travel-market';
-export const travelProfit:WidgetDefinition={
-  id:'travel-profit',title:'Travel Profit Calculator',defaultPosition:'right',defaultOrder:58,modes:['TRAVEL'],settings:{enabled:true,compact:true},
-  visible:ctx=>Boolean(ctx.snapshot?.travel?.active&&ctx.snapshot.travel.observedAt&&ctx.now-ctx.snapshot.travel.observedAt<=90000),
-  create(){
-    let ctx:WidgetContext,body:HTMLElement,signature='',bagSignature='';
-    const form=el('form','profit-form'),results=el('div'),inputs=new Map<string,HTMLInputElement>();
-    for(const [name,label,min,max,placeholder] of [['capacity','Available capacity',1,100,'Enter free bag slots'],['budget','Budget',0,1e12,'No budget limit'],['roundTripMinutes','Round trip minutes',1,2880,'From flight · estimated'],['feePercent','Selling fee percent',0,100,'0']] as const){const row=el('label','market-field',label),input=el('input');input.name=name;input.type='number';input.min=String(min);input.max=String(max);input.placeholder=placeholder;input.setAttribute('aria-label',label);if(name==='feePercent')input.step='0.1';row.append(input);inputs.set(name,input);form.append(row);}
-    const watched=el('input');watched.type='checkbox';watched.setAttribute('aria-label','Optimize watched products only');const label=el('label','filter-check');label.append(watched,el('span','','Watched products only'));form.append(label);
-    const bag=():Settings['bag']=>({capacity:inputs.get('capacity')!.value===''?null:inputs.get('capacity')!.valueAsNumber,budget:inputs.get('budget')!.value===''?null:inputs.get('budget')!.valueAsNumber,roundTripMinutes:inputs.get('roundTripMinutes')!.value===''?null:inputs.get('roundTripMinutes')!.valueAsNumber,feePercent:inputs.get('feePercent')!.valueAsNumber,favoritesOnly:watched.checked});
-    const calculate=()=>{
-      const settings=bag(),country=travelCountry(ctx.snapshot);
-      if(!country||!ctx.snapshot){results.replaceChildren(note('Destination unknown. Products from other countries are excluded.'));return;}
-      if(settings.capacity===null){results.replaceChildren(stat('Destination',country),stat('Available capacity','Unknown'),note('Enter your free bag slots. Torn API does not provide remaining travel capacity.'));return;}
-      const rows=marketRows(ctx.snapshot,{...ctx.state.settings.market,country:'auto',search:'',category:'all',inStock:true,favoritesOnly:settings.favoritesOnly},ctx.state.favorites,ctx.now);
-      const plan=optimizeBag(rows,settings.capacity,settings.budget,settings.feePercent,ctx.now);
-      if(!plan){results.replaceChildren(note('Enter capacity 1–100, a valid budget and selling fee 0–100%.'));return;}
-      if(!plan.quantity){results.replaceChildren(note('No fresh, profitable stock fits this budget or watch selection.'));return;}
-      const hero=el('div','purchase-plan');hero.append(el('span','eyebrow',plan.optimal?'BEST PURCHASE · OBSERVED STOCK':'SUGGESTED PURCHASE · APPROXIMATION'));
-      plan.purchases.forEach(row=>hero.append(el('strong','',`${row.quantity} × ${row.item.name}`)));
-      const travel=ctx.snapshot.travel;
-      const flightMinutes=travel?.arrivesAt&&travel.departedAt&&(travel.arrivesAt>travel.departedAt)?(travel.arrivesAt-travel.departedAt)/60000:null;
-      const minutes=settings.roundTripMinutes??(flightMinutes&&flightMinutes<=1440?flightMinutes*2:null);
-      results.replaceChildren(stat('Available capacity',`${settings.capacity} · manual`),stat('Using bag slots',`${plan.quantity} / ${settings.capacity}`),hero,stat('Cost',money(plan.cost)),stat('Torn value',money(plan.tornValue)),stat('Estimated profit',money(plan.profit)),stat('Profit / hr',minutes?money(plan.profit/(minutes/60)):'Unknown'),note(minutes?`${Math.round(minutes)} min round trip · ${settings.roundTripMinutes?'your input':'estimated as twice this flight; excludes shopping time'}`:'Enter round trip minutes to calculate profit per hour.'),note('Market value is an estimate, not a guaranteed sale price. Includes your selling fee; excludes travel costs. Stock is a community observation.'));
-    };
-    const optimize=button('Optimize Bag',()=>{calculate();const settings=bag();if(settings.capacity!==null&&Number.isInteger(settings.capacity)&&settings.capacity>=1&&settings.capacity<=100&&Number.isFinite(settings.feePercent))void ctx.saveSettings({bag:settings});});optimize.className='optimize-button';form.append(optimize);form.addEventListener('submit',event=>{event.preventDefault();optimize.click();});form.addEventListener('input',calculate);form.addEventListener('change',calculate);
-    const update=(context:WidgetContext)=>{ctx=context;const next=JSON.stringify([ctx.snapshot,ctx.state.settings.bag,ctx.state.favorites,Math.floor(ctx.now/10000)]);if(signature===next)return;signature=next;const saved=JSON.stringify(ctx.state.settings.bag);if(saved!==bagSignature){bagSignature=saved;for(const [name,input] of inputs){if((body.getRootNode() as ShadowRoot).activeElement===input)continue;const value=ctx.state.settings.bag[name as keyof Settings['bag']];input.value=value===null?'':String(value);}watched.checked=ctx.state.settings.bag.favoritesOnly;}calculate();};
-    return{mount(node,context){body=node;body.append(form,results);update(context);},update(_data,context){update(context);},destroy(){body.replaceChildren();}};
+import { tripProfit, type Trip, type TravelApp } from '@tcd/shared';
+import { widget } from '../base';
+import { duration, el, note, stat } from '../../core/dom';
+import { money, priceAge } from '../travel-market';
+export const signedMoney = (value: number | null | undefined) => value === null || value === undefined ? 'Waiting for price…' : `${value < 0 ? '−' : '+'}${money(Math.abs(value))}`;
+export function profitNodes(trip: Trip, app: TravelApp, now: number): HTMLElement[] {
+  const profit = tripProfit(trip, app, now), nodes: HTMLElement[] = [];
+  nodes.push(el('div', 'route', `${trip.country} → Torn`));
+  if (!profit.rows.length) {
+    nodes.push(note('Waiting for purchase evidence…'), note(app.logAccess ? 'Your foreign purchase records are checked automatically.' : 'Successful purchases made on this page are tracked. A Full key or custom Item abroad buy log permission also recovers purchases across devices.'));
   }
-};
+  if(profit.rows.length>1){
+    const wrap=el('div','trip-items'),table=el('table'),head=el('thead'),tr=el('tr');
+    ['Item','Qty','Cost','Torn value','Profit'].forEach(label=>tr.append(el('th','',label)));head.append(tr);table.append(head);const tbody=el('tbody');
+    const compact=(value:number|null)=>value===null?'—':new Intl.NumberFormat(undefined,{style:'currency',currency:'USD',notation:'compact',maximumFractionDigits:3}).format(value);
+    for(const row of profit.rows){const line=el('tr');for(const value of [row.name,String(row.quantity),compact(row.cost),compact(row.marketValue),row.profit===null?'—':`${row.profit>=0?'+':''}${compact(row.profit)}`])line.append(el('td','',value));line.title=`Buy price ${money(row.unitCost)} · Torn market ${money(row.marketPrice)} · ${priceAge(row.priceObservedAt,now)}`;tbody.append(line);}
+    table.append(tbody);wrap.append(table);nodes.push(wrap);
+    for(const row of profit.rows)nodes.push(note(`${row.name} · buy ${money(row.unitCost)} · Torn ${row.confidence==='low'?'~':''}${money(row.marketPrice)} · ${priceAge(row.priceObservedAt,now)}`));
+  }
+  for (const row of profit.rows.length===1?profit.rows:[]) {
+    const card = el('div','market-product');
+    card.append(el('strong','',row.name),stat('Purchased',row.quantity.toLocaleString()),stat('Buy price',row.unitCost === null ? 'Waiting for price…' : money(row.unitCost)),stat('Cost',row.cost === null ? 'Waiting for price…' : money(row.cost)),
+      stat('Torn market',row.marketPrice === null ? 'Waiting for price…' : `${row.confidence === 'low' ? '~' : ''}${money(row.marketPrice)}`),note(priceAge(row.priceObservedAt,now)),stat('Market value',row.marketValue === null ? 'Waiting for price…' : money(row.marketValue)),stat('Est. profit',signedMoney(row.profit)),stat('Profit / item',signedMoney(row.profit === null ? null : row.profit / row.quantity)),stat('ROI',row.roi === null ? 'Waiting for price…' : `${row.roi >= 0 ? '+' : ''}${row.roi.toFixed(1)}%`));
+    nodes.push(card);
+  }
+  if (profit.rows.length) {
+    const total = el('div','profit-hero'); total.append(el('span','eyebrow','TOTAL TRIP · ESTIMATED'),stat('Spent',profit.spent === null ? 'Waiting for cost…' : money(profit.spent)),stat(trip.finalizedAt?'Value at completion':'Current value',profit.marketValue === null ? 'Waiting for price…' : money(profit.marketValue)),
+      el('strong','profit-total',profit.range ? `${signedMoney(profit.range.low)} – ${signedMoney(profit.range.high)}` : signedMoney(profit.estimatedProfit)),stat('ROI',profit.roi === null ? 'Waiting for price…' : `${profit.roi.toFixed(1)}%`),note(`${profit.confidence.toUpperCase()} CONFIDENCE · ${priceAge(profit.priceAgeMs === null ? null : now-profit.priceAgeMs,now)}`));
+    if (profit.range) total.append(note('Range uses observed market values from the last 24 hours; it is not a guaranteed sale range.'));
+    if (profit.actualProfit !== null) total.append(stat('Actual revenue',money(profit.actualRevenue)),stat('Actual profit',signedMoney(profit.actualProfit)));
+    nodes.push(total);
+    if (profit.roundTripMs) nodes.push(stat('Round trip duration',duration(now+profit.roundTripMs,now)),stat('Profit / hour',signedMoney(profit.profitPerHour)),note('Estimated profit ÷ total hours from outbound departure to return landing. Includes shopping time.'));
+    else nodes.push(note('Round trip duration is not yet known.'));
+    if (profit.oneWayMs) nodes.push(stat('Return flight profit / hour',signedMoney(profit.oneWayProfitPerHour)),note('Estimated profit ÷ return flight hours.'));
+    nodes.push(note('Torn market value is an estimate before selling fees and travel costs. Actual profit stays separate until sale proceeds can be attributed to this trip.'));
+  }
+  if (profit.unconfirmedAdditions) nodes.push(note(`${profit.unconfirmedAdditions} inventory additions are unconfirmed. Gifts, transfers and uses are not counted as purchases.`));
+  if (trip.baselineMissing) nodes.push(note('This trip was first observed after departure. Inventory comparison may be incomplete; confirmed receipts are still usable.'));
+  return nodes;
+}
+export const travelProfit = widget({id:'travel-profit',title:'Trip Profit',defaultPosition:'right',defaultOrder:58,modes:['TRAVEL']},ctx=>{
+  const app=ctx.snapshot?.travelApp;
+  return app?.travelSession ? profitNodes(app.travelSession,app,ctx.now) : [note('Waiting for travel data…')];
+});

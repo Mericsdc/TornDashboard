@@ -9,7 +9,7 @@ import { travelMarket } from '../widgets/travel-market';
 import { travelProfit } from '../widgets/travel-profit';
 import { companyAddiction } from '../widgets/company-addiction';
 import { restock } from '../widgets/restock';
-export interface WidgetContext { state: PublicState; snapshot: Snapshot | null; now: number; mode: Mode; saveSettings: (patch: Partial<PublicState['settings']>) => Promise<void>; saveFavorites: (state: PublicState['favorites']) => Promise<void> }
+export interface WidgetContext { state: PublicState; snapshot: Snapshot | null; now: number; mode: Mode; openOptions?: () => Promise<void>; saveSettings: (patch: Partial<PublicState['settings']>) => Promise<void>; saveFavorites: (state: PublicState['favorites']) => Promise<void> }
 export interface WidgetDefinition {
   id: WidgetId; title: string; defaultPosition: Position; defaultOrder: number; modes: readonly Mode[];
   settings: { enabled: boolean; compact: boolean };

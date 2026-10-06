@@ -9,7 +9,7 @@ export function widget(definition: Omit<WidgetDefinition, 'create' | 'settings'>
       const key = JSON.stringify([context.mode, context.snapshot, context.state.favorites, context.state.settings.weights, context.state.settings.alerts,
         Math.floor(context.now / (timers.includes(definition.id) ? 1000 : 10000))]);
       if (!container || key === previous) return;
-      previous = key;
+      previous = key; container.dataset.quality=context.snapshot?.travelApp?.quality || (context.snapshot?'fresh':'loading');
       const expanded = [...container.querySelectorAll('details')].map(node => node.open);
       container.replaceChildren(...render(context));
       [...container.querySelectorAll('details')].forEach((node, i) => { if (i < expanded.length) node.open = expanded[i]!; });

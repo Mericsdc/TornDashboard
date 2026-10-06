@@ -7,7 +7,7 @@ export const projectRoot = resolve(fileURLToPath(new URL('..', import.meta.url))
 export const extensionRoot = resolve(projectRoot, '..');
 // Only packaged assets may be replaced or distributed. Source and secrets stay out of ZIPs.
 export const runtimeFiles = Object.freeze([
-  'content.js', 'service-worker.js', 'options.js', 'options.html', 'options.css',
+  'content.js', 'travel-page.js', 'service-worker.js', 'options.js', 'options.html', 'options.css',
   'offscreen.js', 'offscreen.html', 'warning.wav', 'icon.svg', 'icon.png', 'manifest.json'
 ]);
 

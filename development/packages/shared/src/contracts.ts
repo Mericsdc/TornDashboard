@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MODES, WIDGET_IDS } from './defaults';
+import { TravelAppSchema } from './trip-model';
 
 export type Mode = typeof MODES[number];
 export type WidgetId = typeof WIDGET_IDS[number];
@@ -17,6 +18,7 @@ export const SettingsSchema = z.object({
   theme: z.enum(['torn-dark', 'slate', 'liquid-glass']), animation: z.boolean(), autoSwitching: z.boolean(),
   rememberPositions: z.boolean(), mode: z.enum(MODES), dataSource: z.enum(['mock', 'companion', 'bosbot', 'torn']),
   stockProvider: z.enum(['off', 'yata']).default('off'),
+  travelCapacityOverride: z.number().int().min(1).max(100).nullable().default(null),
   bag: z.object({ capacity: z.number().int().min(1).max(100).nullable(), budget: z.number().min(0).max(1e12).nullable(), roundTripMinutes: z.number().min(1).max(2880).nullable(), feePercent: z.number().min(0).max(100), favoritesOnly: z.boolean() }).strict().default({ capacity: null, budget: null, roundTripMinutes: null, feePercent: 0, favoritesOnly: false }),
   mockScenario: z.enum(['normal', 'travel', 'war']), weights: WeightsSchema,
   alerts: z.object({ chain: z.boolean(), stock: z.boolean(), sound: z.boolean(), restockReminder: z.boolean() }).strict().default({ chain: true, stock: true, sound: true, restockReminder: true }),
@@ -66,13 +68,14 @@ export const RestockSchema = z.discriminatedUnion('kind', [
 ]);
 export type RestockEstimate = z.infer<typeof RestockSchema>;
 export const StockSchema = z.object({ itemId: z.number().int().positive(), name: z.string().max(80), country: z.string().max(60),
-  cost: z.number().positive().nullable().optional(), tornValue: z.number().positive().nullable().optional(), priceObservedAt: z.number().nullable().optional(),
+  cost: z.number().positive().nullable().optional(), costObservedAt: z.number().nonnegative().nullable().optional(), tornValue: z.number().positive().nullable().optional(), priceObservedAt: z.number().nullable().optional(),
   stock: z.number().int().nonnegative().nullable(), observedAt: z.number().nonnegative().nullable(), restock: RestockSchema }).strict();
 export type StockItem = z.infer<typeof StockSchema>;
 export const SnapshotSchema = z.object({ source: z.enum(['mock', 'live']), generatedAt: z.number(), provider: z.enum(['bosbot', 'torn']).optional(), stockProvider: z.enum(['yata', 'off']).optional(), issues: z.record(z.string(), z.string().max(200)).optional(), favorites: z.array(FavoriteSchema).max(50).optional(),
   war: z.object({ id: z.number().int().positive().nullable().optional(), opponentId: z.number().int().positive().nullable().optional(), active: z.boolean(), opponent: z.string(), score: z.number().nonnegative().nullable(), enemyScore: z.number().nonnegative().nullable().optional(), targetScore: z.number().nonnegative().nullable(), endsAt: z.number().nullable(), observedAt: z.number().optional() }).nullable(),
   chain: z.object({ id: z.number().int().positive().nullable().optional(), startedAt: z.number().nullable().optional(), count: z.number().nonnegative(), goal: z.number().positive(), expiresAt: z.number().nullable(), observedAt: z.number().optional() }).nullable(),
   travel: z.object({ active: z.boolean(), destination: z.string(), origin: z.string(), arrivesAt: z.number().nullable(), departedAt: z.number().nullable().optional(), capacity: z.number().int().min(1).max(100).nullable().optional(), state: z.string().max(30).optional(), description: z.string().max(150).optional(), observedAt: z.number().optional() }).nullable(),
+  travelApp: TravelAppSchema.optional(),
   company: z.object({ isDirector: z.boolean(), name: z.string().max(100), observedAt: z.number().nullable(), employees: z.array(z.object({ id: z.number().int().positive(), name: z.string().max(80), addictionEffect: z.number().nullable() }).strict()).max(100) }).strict().nullable().optional(),
   player: z.object({ level: z.number().positive().nullable() }), targets: z.array(TargetSchema).max(200), stocks: z.array(StockSchema).max(2000)
 }).strict();

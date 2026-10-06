@@ -46,3 +46,7 @@ button,select{border:1px solid var(--line);border-radius:3px;background:#30373c;
 @container(min-width:700px){.market-product{grid-template-columns:1fr 1fr 1fr}}
 @media(max-width:850px){.travel-dock{grid-template-columns:1fr}.travel-dock .market-results{max-height:500px}}
 @media(prefers-contrast:more){.dashboard[data-theme="liquid-glass"] .panel,.travel-dock{background:#202832}.widget-card{border-color:#a4b2c3}}
+
+.flight-countdown{display:block;font-size:22px;font-weight:650;font-variant-numeric:tabular-nums;margin-top:10px}.profit-total{display:block;font-size:23px;margin:12px 0}.travel-dock.single-card{grid-template-columns:1fr}.travel-dock .widget-card{min-width:0}.travel-dock .widget-body{overflow-wrap:anywhere}.market-filters[hidden]{display:none}
+
+.trip-items{overflow-x:auto;margin:12px 0}.trip-items table{width:100%;border-collapse:collapse;font-size:11px}.trip-items td,.trip-items th{text-align:right;padding:8px 3px;border-bottom:1px solid #ffffff15}.trip-items td:first-child,.trip-items th:first-child{text-align:left;max-width:100px}.trip-items th{font-weight:500;color:#c6d1dc}

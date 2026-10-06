@@ -1,7 +1,8 @@
-import { FavoriteSchema, SettingsSchema, WIDGET_IDS, category, freshStock, type PublicState, type Snapshot, type StockItem } from '@tcd/shared';
+import { FavoriteSchema, SettingsSchema, WIDGET_IDS, category, freshStock, type PublicState, type Snapshot, type StockItem, historyTotals } from '@tcd/shared';
 import { send } from '../services/protocol';
-import { button, el, time } from '../core/dom';
+import { button, el, time, stat } from '../core/dom';
 import { money } from '../widgets/travel-market';
+import { profitNodes, signedMoney } from '../widgets/travel-profit';
 import { requestTornAccess } from '../services/torn-connection';
 let state: PublicState, stocks: StockItem[] = [];
 document.querySelector<HTMLElement>('#extension-version')!.textContent = `v${chrome.runtime.getManifest().version}`;
@@ -23,8 +24,8 @@ function render(): void {
     if (input instanceof HTMLInputElement && input.type === 'checkbox') input.checked = Boolean(value);
     else if (input instanceof HTMLInputElement || input instanceof HTMLSelectElement) input.value = String(value);
   }
-  for (const [name,value] of Object.entries({ chainAlert: state.settings.alerts.chain, stockAlert: state.settings.alerts.stock, soundAlert: state.settings.alerts.sound, restockReminder: state.settings.alerts.restockReminder, yata: state.settings.stockProvider === 'yata', bagFavoritesOnly: state.settings.bag.favoritesOnly })) (field(name) as HTMLInputElement).checked = value;
-  for (const [name,value] of Object.entries(state.settings.bag)) if (name !== 'favoritesOnly') field(name).value = value === null ? '' : String(value);
+  for (const [name,value] of Object.entries({ chainAlert: state.settings.alerts.chain, stockAlert: state.settings.alerts.stock, soundAlert: state.settings.alerts.sound, restockReminder: state.settings.alerts.restockReminder, yata: state.settings.stockProvider === 'yata' })) (field(name) as HTMLInputElement).checked = value;
+  field('travelCapacityOverride').value = state.settings.travelCapacityOverride === null ? '' : String(state.settings.travelCapacityOverride);
   const widgets = document.querySelector<HTMLElement>('#widget-settings')!; widgets.replaceChildren();
   for (const id of WIDGET_IDS) { const label = el('label'), input = el('input'); input.type = 'checkbox'; input.name = `widget-${id}`; input.checked = !state.settings.disabledWidgets.includes(id); label.append(input, el('span','', id.replaceAll('-',' '))); widgets.append(label); }
   renderFavorites();
@@ -53,7 +54,7 @@ function renderFavorites(): void {
   }
 }
 async function products(): Promise<void> {
-  const data = await send<Snapshot>({type:'GET_SNAPSHOT'}); stocks=data.stocks;
+  const data = await send<Snapshot>({type:'GET_SNAPSHOT'}); stocks=data.stocks;renderHistory(data);
   const list=document.querySelector<HTMLSelectElement>('#product-list')!; list.replaceChildren();
   for (const country of [...new Set(stocks.map(s=>s.country))].sort()) for (const kind of ['flowers','plushies','other'] as const) {
     const rows=stocks.filter(s=>s.country===country&&category(s)===kind).sort((a,b)=>a.name.localeCompare(b.name));if(!rows.length)continue;
@@ -72,13 +73,27 @@ form.addEventListener('submit',event=>{ event.preventDefault(); handle((async()=
   if(stockProvider==='yata'&&!await chrome.permissions.request({origins:['https://yata.yt/*']}))throw new Error('YATA access was not granted');
   const nullable=(name:string)=>field(name).value.trim()===''?null:Number(field(name).value);
   // Send only fields edited here. An older Options tab must not overwrite appearance saved on Torn.
-  const patch=SettingsSchema.pick({stockProvider:true,bag:true,alerts:true,disabledWidgets:true}).parse({stockProvider,bag:{capacity:nullable('capacity'),budget:nullable('budget'),roundTripMinutes:nullable('roundTripMinutes'),feePercent:Number(field('feePercent').value),favoritesOnly:checked('bagFavoritesOnly')},alerts:{chain:checked('chainAlert'),stock:checked('stockAlert'),sound:checked('soundAlert'),restockReminder:checked('restockReminder')},disabledWidgets:WIDGET_IDS.filter(id=>!checked(`widget-${id}`))});
+  const patch=SettingsSchema.pick({stockProvider:true,travelCapacityOverride:true,alerts:true,disabledWidgets:true}).parse({stockProvider,travelCapacityOverride:nullable('travelCapacityOverride'),alerts:{chain:checked('chainAlert'),stock:checked('stockAlert'),sound:checked('soundAlert'),restockReminder:checked('restockReminder')},disabledWidgets:WIDGET_IDS.filter(id=>!checked(`widget-${id}`))});
   state=await send<PublicState>({type:'SAVE_SETTINGS',patch});render();report('Settings saved. Torn tabs update automatically.');handle(products());
 })());});
 document.querySelector<HTMLFormElement>('#key-form')!.addEventListener('submit',event=>{event.preventDefault();const target=event.currentTarget as HTMLFormElement,key=field('tornKey',target).value.trim(),remember=(field('rememberKey',target) as HTMLInputElement).checked;connectionAction('Connecting to Torn API…',async()=>{await send({type:'SAVE_KEY',key,remember});field('tornKey',target).value='';await keyStatus();await products();report('Connected. Personal data comes directly from Torn. Enable YATA and Save settings for stocks.');});});
 document.querySelector('#disconnect-key')!.addEventListener('click',()=>handle((async()=>{await send({type:'DISCONNECT_KEY'});stocks=[];await keyStatus();document.querySelector('#product-list')!.replaceChildren();renderFavorites();report('API key removed');})()));
-document.querySelector('#refresh-data')!.addEventListener('click',()=>connectionAction('Refreshing Torn data…',async()=>{await send({type:'REFRESH_DATA'});await keyStatus();await products();report('Data refreshed. Torn and YATA cache intervals still apply.');}));
+document.querySelector('#refresh-data')!.addEventListener('click',()=>connectionAction('Refreshing Torn data…',async()=>{await send({type:'REFRESH_DATA'});await keyStatus();await products();report('Showing saved data while refresh completes. Torn and YATA cache intervals still apply.');}));
 document.querySelector('#test-connection')!.addEventListener('click',()=>connectionAction('Checking Chrome access and Torn API…',async()=>{await send({type:'TEST_CONNECTION'});await keyStatus();report('Chrome access and Torn API connection are working. No API key was sent by this test.');}));
 document.querySelector('#test-sound')!.addEventListener('click',()=>handle((async()=>{await send({type:'TEST_SOUND'});report('Warning sound played');})()));
 document.querySelector<HTMLFormElement>('#favorite-form')!.addEventListener('submit',event=>{event.preventDefault();const target=event.currentTarget as HTMLFormElement;handle((async()=>{const item=stocks.find(s=>`${s.country}:${s.itemId}`===field('product',target).value);if(!item)throw new Error('Connect your Torn API to load products');const favorite=FavoriteSchema.parse({itemId:item.itemId,name:item.name,country:item.country,minimumStock:Number(field('minimumStock',target).value),alert:(field('alert',target) as HTMLInputElement).checked});state=await send<PublicState>({type:'SAVE_FAVORITES',favorites:[...state.favorites.filter(f=>!(f.itemId===item.itemId&&f.country===item.country)),favorite]});renderFavorites();report('Product watch saved');})());});
 handle((async()=>{state=await send<PublicState>({type:'READ_STATE'});render();const connected=await keyStatus();report('Ready');if(connected)handle(products());})());
+
+function renderHistory(data: Snapshot): void {
+  const host=document.querySelector<HTMLElement>('#trip-history')!,app=data.travelApp,opened=new Set([...host.querySelectorAll<HTMLDetailsElement>('details[data-trip-id]')].filter(n=>n.open).map(n=>n.dataset.tripId));host.replaceChildren();
+  if(!app){host.append(el('p','muted','Waiting for saved trips…'));return;}
+  const totals=historyTotals(app,Date.now());host.append(stat('Trips · last 30 days',String(totals.trips)),stat('Spent · known purchases',money(totals.spent)),stat('Estimated value at completion',money(totals.value)),stat('Estimated profit',signedMoney(totals.estimatedProfit)),stat('Actual profit · attributed sales',totals.actualProfit===null?'Not yet verified':signedMoney(totals.actualProfit)),stat('Round trip profit / hour',totals.profitPerHour===null?'Insufficient duration data':signedMoney(totals.profitPerHour)),stat('Best country · estimated',totals.bestCountry||'—'),stat('Best item · estimated',totals.bestItem||'—'));
+  if(!app.history.length)host.append(el('p','muted','Your completed trips will appear here.'));
+  for(const trip of app.history){const row=el('details','watch-country');row.dataset.tripId=trip.tripId;row.open=opened.has(trip.tripId);row.append(el('summary','',`${trip.country} · ${trip.finalizedAt?new Date(trip.finalizedAt).toLocaleDateString():''} · ${trip.purchases.length} receipts`),el('p','muted',trip.finalization==='incomplete-evidence'?'Incomplete purchase evidence':'Confirmed purchase ledger'),...profitNodes(trip,app,Date.now()));host.append(row);}
+}
+let updating=false;
+chrome.runtime.onMessage.addListener((message: unknown)=>{
+  if(!state||typeof message!=='object'||message===null||!('type' in message))return;
+  if(message.type==='ACCOUNT_CHANGED'){stocks=[];document.querySelector('#trip-history')!.replaceChildren();document.querySelector('#product-list')!.replaceChildren();handle(keyStatus());return;}
+  if(message.type==='DATA_CHANGED'&&!updating){updating=true;void products().catch(()=>undefined).finally(()=>{updating=false;});}
+});

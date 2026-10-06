@@ -7,7 +7,7 @@ export function unitProfit(item: StockItem): number | null {
   return item.cost && item.tornValue ? item.tornValue - item.cost : null;
 }
 export function pricingFresh(item: StockItem, now: number): boolean {
-  return Boolean(item.observedAt && now - item.observedAt >= -30000 && now - item.observedAt <= 180000 && item.priceObservedAt && now - item.priceObservedAt >= -30000 && now - item.priceObservedAt <= 2 * 3600000);
+  return Boolean(item.priceObservedAt && now - item.priceObservedAt >= -30000 && now - item.priceObservedAt <= 2 * 3600000);
 }
 export const COUNTRIES = ['Mexico', 'Hawaii', 'South Africa', 'Japan', 'China', 'Argentina', 'Switzerland', 'Canada', 'United Kingdom', 'UAE', 'Cayman Islands'] as const;
 export function canonicalCountry(value: string | null | undefined): string | null {
@@ -19,6 +19,7 @@ export function canonicalCountry(value: string | null | undefined): string | nul
   return COUNTRIES.find(country => country.toLowerCase() === text) || null;
 }
 export function travelCountry(snapshot: Snapshot | null): string | null {
+  if (snapshot?.travelApp) return snapshot.travelApp.travel.marketContextCountry || snapshot.travelApp.previewCountry;
   const travel = snapshot?.travel;
   if (!travel?.active) return null;
   const destination = canonicalCountry(travel.destination);
@@ -40,15 +41,15 @@ export function marketRows(snapshot: Snapshot, settings: Settings['market'], fav
       const score = (item: StockItem): number => {
         if (settings.sort === 'stock') return freshStock(item, now) ? item.stock || 0 : -Infinity;
         const profit = unitProfit(item);
-        return profit === null || !pricingFresh(item, now) ? -Infinity : settings.sort === 'roi' ? profit / item.cost! : profit;
+        return profit === null ? -Infinity : settings.sort === 'roi' ? profit / item.cost! : profit;
       };
       return (settings.sort === 'name' ? 0 : score(b) - score(a)) || a.name.localeCompare(b.name) || a.country.localeCompare(b.country);
     });
 }
 export function bestProduct(snapshot: Snapshot, now: number): StockItem | undefined {
-  const country = travelCountry(snapshot);
+  void now; const country = travelCountry(snapshot);
   if (!country || ['Torn', 'Unknown destination', 'Unknown origin'].includes(country)) return undefined;
-  return snapshot.stocks.filter(item => item.country === country && freshStock(item, now) && (item.stock || 0) > 0 && pricingFresh(item, now) && (unitProfit(item) ?? 0) > 0)
+  return snapshot.stocks.filter(item => item.country === country && (unitProfit(item) ?? 0) > 0)
     .sort((a, b) => unitProfit(b)! - unitProfit(a)!)[0];
 }
 export function calculateProfit(cost: number | null | undefined, value: number | null | undefined, quantity: number, feePercent = 0) {

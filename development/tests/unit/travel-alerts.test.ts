@@ -4,10 +4,10 @@ const now = 1800000000000;
 function item(patch: Partial<StockItem> = {}): StockItem { return { itemId: 1, name: 'Cherry Blossom', country: 'Japan', stock: 20, cost: 100, tornValue: 300, priceObservedAt: now, observedAt: now, restock: { kind: 'unknown', reason: 'No history' }, ...patch }; }
 function snapshot(patch: Partial<Snapshot> = {}): Snapshot { return { source: 'live', provider: 'torn', generatedAt: now, war: null, chain: null, travel: { active: true, origin: 'Torn', destination: 'Japan', arrivesAt: now + 600000, observedAt: now }, player: { level: null }, targets: [], stocks: [item()], ...patch }; }
 describe('travel destination, profit and filters', () => {
-  it('ranks only fresh in-stock prices at the flight destination, including return flights', () => {
+  it('keeps last-known prices usable at the flight destination, including return flights', () => {
     const data = snapshot({ stocks: [item(), item({ itemId: 2, cost: 10, tornValue: 2000, stock: 0 }), item({ itemId: 3, country: 'UAE', tornValue: 5000 }), item({ itemId: 4, tornValue: 9000, priceObservedAt: now-3*3600000 })] });
-    expect(bestProduct(data, now)?.itemId).toBe(1);
-    expect(bestProduct({ ...data, travel: { ...data.travel!, destination: 'Torn', origin: 'Japan' } }, now)?.itemId).toBe(1);
+    expect(bestProduct(data, now)?.itemId).toBe(4);
+    expect(bestProduct({ ...data, travel: { ...data.travel!, destination: 'Torn', origin: 'Japan' } }, now)?.itemId).toBe(4);
     expect(bestProduct(snapshot({ stocks: [item({ tornValue: null })] }), now)).toBeUndefined();
   });
   it('lists all products and supports search, categories, stock and watched items', () => {

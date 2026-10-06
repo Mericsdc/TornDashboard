@@ -7,7 +7,7 @@ export class WidgetManager {
   private mounted = new Map<WidgetId, Instance>();
   constructor(private panels: Panels, private registry: WidgetRegistry, private move: (id: WidgetId, direction: 'up' | 'down' | 'across') => void) {}
   reconcile(layout: Layout, context: WidgetContext): void {
-    const wanted = new Set([...layout.left, ...layout.right].filter(id => !context.state.settings.disabledWidgets.includes(id) && (context.mode === 'CUSTOM' || this.registry.get(id)?.modes.includes(context.mode)) && (this.registry.get(id)?.visible?.(context) ?? true)));
+    const wanted = new Set([...layout.left, ...layout.right].filter(id => !['travel-market','travel-profit'].includes(id) && !context.state.settings.disabledWidgets.includes(id) && (context.mode === 'CUSTOM' || this.registry.get(id)?.modes.includes(context.mode)) && (this.registry.get(id)?.visible?.(context) ?? true)));
     for (const [id, instance] of this.mounted) if (!wanted.has(id)) { instance.widget.destroy(); instance.card.remove(); this.mounted.delete(id); }
     for (const side of ['left', 'right'] as const) {
       const list = this.panels[side];
