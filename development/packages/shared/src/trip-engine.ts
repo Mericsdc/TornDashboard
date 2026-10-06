@@ -198,7 +198,7 @@ export function mergeSnapshot(previous: Snapshot | undefined, fresh: Snapshot, a
       tornValue: newerPrice ? stock.tornValue : old?.tornValue ?? stock.tornValue, priceObservedAt: newerPrice ? stock.priceObservedAt : old?.priceObservedAt ?? stock.priceObservedAt,
       restock: stock.restock.kind === 'unknown' && old?.restock.kind !== 'unknown' ? old?.restock ?? stock.restock : stock.restock });
   }
-  const snapshot = { ...fresh, travelApp: app, stocks: [...byId.values()], war: fresh.war ?? previous?.war ?? null, chain: fresh.chain ?? previous?.chain ?? null };
+  const snapshot = { ...fresh, travelApp: app, stocks: [...byId.values()], war: fresh.issues?.war ? previous?.war ?? fresh.war : fresh.war, chain: fresh.issues?.chain ? previous?.chain ?? fresh.chain : fresh.chain };
   mergePrices(app, snapshot.stocks);
   const t = app.travel;
   snapshot.travel = { active: t.state !== 'AT_HOME', origin: t.originCountry || 'Torn', destination: t.destinationCountry || 'Unknown destination',

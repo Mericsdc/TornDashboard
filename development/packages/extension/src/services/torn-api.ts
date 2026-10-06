@@ -90,7 +90,7 @@ export class TornApi {
       const active = ['Traveling', 'Abroad'].includes(status.state);
       if (active && dest && dest !== 'Torn') this.lastForeign = dest;
       const route = hint && now - hint.observedAt <= 60000 && now >= hint.observedAt - 30000 && canonicalCountry(hint.destination) === dest ? canonicalCountry(hint.origin) : null;
-      const phase = t.time_left > 0 ? dest === 'Torn' ? 'RETURNING' : 'OUTBOUND' : status.state === 'Abroad' ? 'ABROAD' : status.state === 'Traveling' ? 'LANDED' : 'AT_HOME';
+      const phase = t.time_left > 0 ? dest === 'Torn' ? 'RETURNING' : 'OUTBOUND' : status.state === 'Abroad' || dest && dest !== 'Torn' && t.arrival_at && t.arrival_at*1000<=now ? 'ABROAD' : status.state === 'Traveling' ? 'LANDED' : 'AT_HOME';
       this.travelEvidence = { state: phase, originCountry: dest === 'Torn' ? route || this.lastForeign : 'Torn', destinationCountry: dest, departedAt: t.departed_at ? t.departed_at * 1000 : null, arrivalAt: t.arrival_at ? t.arrival_at * 1000 : null, method: t.method ?? null, source: 'api', at: Math.min(profile.at, travel.at) };
       s.travel = { active, destination: dest || 'Unknown destination', origin: dest === 'Torn' ? route || this.lastForeign || 'Unknown origin' : 'Torn', arrivesAt: t.arrival_at ? t.arrival_at * 1000 : null, departedAt: t.departed_at ? t.departed_at * 1000 : null, state: status.state, description: status.description.slice(0,150), observedAt: Math.min(profile.at, travel.at) };
     }

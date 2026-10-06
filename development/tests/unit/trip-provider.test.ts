@@ -41,6 +41,9 @@ describe('real travel provider contracts and rate-bound cache',()=>{
   it('does not follow arbitrary pagination URLs or their embedded keys, and marks truncated evidence incomplete',async()=>{
     const{api,request}=setup({'user/log':{log:[],_metadata:{links:{next:'https://attacker.example/v2/user/log?key=PRIVATE&to=1'}}}}),app=await active(api),data=await api.travelData(app);expect(data.logsComplete).toBe(false);expect(request.mock.calls.some(([u])=>String(u).includes('attacker'))).toBe(false);
   });
+  it('preserves a foreign ground context when a hospital status replaces Abroad',async()=>{
+    const{api}=setup({'user/profile':{profile:{id:55,name:'Fixture',level:40,status:{state:'Hospital',description:'Hospital'}}}});await api.snapshot('off',{});expect(api.travelEvidence?.state).toBe('ABROAD');expect(api.travelEvidence?.destinationCountry).toBe('Japan');
+  });
   it('keeps failed inventory categories out of diff coverage and does not fabricate capacity with unknown multiplier perks',async()=>{
     const{api}=setup({'user/inventory':{error:{code:16}},'user/perks':{perks:{faction:[],job:[],book:['Double travel capacity'],enhancer:[]}}}),app=await active(api),data=await api.travelData(app);expect(data.inventories).toEqual([]);expect(data.capacity).toBeUndefined();expect(data.purchases).toHaveLength(1);
   });

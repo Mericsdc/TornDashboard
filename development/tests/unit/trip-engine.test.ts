@@ -84,6 +84,10 @@ describe('purchase evidence and automatic derived values',()=>{
   it('projects resource regeneration locally, preserves over-cap bars and declines unsupported timers',()=>{
     const bar={current:105,maximum:150,increment:5,interval:300,nextTickAt:now+60000,observedAt:now};expect(predictResource(bar,now+3600000,now)).toBe(150);expect(predictResource({...bar,current:200},now+60000,now)).toBe(200);expect(predictResource({...bar,nextTickAt:null},now+3600000,now)).toBeNull();expect(predictResource(bar,now+3600000,now+16*60000)).toBeNull();
   });
+  it('clears a finished war on a valid null response while retaining it during an API failure',()=>{
+    const app=trip(),before:Snapshot={source:'live',provider:'torn',generatedAt:now,war:{active:true,opponent:'Opponent',score:1,targetScore:10,endsAt:null},chain:null,travel:null,player:{level:null},stocks:[],targets:[]};
+    expect(mergeSnapshot(before,{...before,war:null},app,now).war).toBeNull();expect(mergeSnapshot(before,{...before,war:null,issues:{war:'failed'}},app,now).war?.active).toBe(true);
+  });
   it('preserves newer page stocks and prices through failed or older API updates',()=>{
     const app=trip(),before:Snapshot={source:'live',provider:'torn',generatedAt:now,war:null,chain:null,travel:null,travelApp:app,player:{level:null},targets:[],stocks:[stock()]};
     const merged=mergeSnapshot(before,{...before,issues:{stocks:'failed'},stocks:[stock({stock:null,observedAt:null,tornValue:null})]},app,now+1000);expect(merged.stocks[0]?.stock).toBe(43);expect(merged.stocks[0]?.tornValue).toBe(70455);expect(app.quality).toBe('error-with-cache');

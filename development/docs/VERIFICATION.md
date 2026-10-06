@@ -1,6 +1,6 @@
 # Verification — TornDashboard 0.5.0
 
-2026-10-06. Local Node 24 checks pass: ESLint, strict TypeScript, **86 unit/API/backend/distribution tests** and **eight real unpacked MV3 Chromium flows**. The production build and deterministic 12-asset ZIP package pass. `npm audit` reports zero vulnerabilities after updating the development-only shell-quote dependency.
+2026-10-06. Local Node 24 checks pass: ESLint, strict TypeScript, **88 unit/API/backend/distribution tests** and **eight real unpacked MV3 Chromium flows**. The production build and deterministic 12-asset ZIP package pass. `npm audit` reports zero vulnerabilities after updating the development-only shell-quote dependency.
 
 New domain tests exercise every Torn country through outbound, abroad, return, reload, landed and safe finalization; newer page phase versus cached API enrichment; stale countdowns after landing; next-trip rollover; pre-owned/removed/unchanged inventory; unknown-category coverage; single/multiple products; page/log deduplication; stale price ranges; partial prices; capacity fallbacks/method changes; resource projection; frozen historical valuations; bounded history; known-duration hourly aggregates; persistent SWR reads, coalesced refreshes, outages, worker recreation and owner isolation.
 
