@@ -3,6 +3,7 @@ import { widget } from '../base';
 import { el, note, stat, time } from '../../core/dom';
 export const restock=widget({id:'restock',title:'Restock',defaultPosition:'right',defaultOrder:70,modes:['NORMAL','TRAVEL']},ctx=>{
   const country=ctx.mode==='TRAVEL'?travelCountry(ctx.snapshot):null;
+  if(ctx.mode==='TRAVEL'&&!country)return[note('Waiting for market context…')];
   const watches=ctx.state.favorites.filter(f=>!country||canonicalCountry(f.country)===country);
   if(!watches.length)return[note('Add a watched product for restock estimates.')];
   return watches.map(f=>{
