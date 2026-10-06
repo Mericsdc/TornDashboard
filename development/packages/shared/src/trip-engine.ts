@@ -1,3 +1,4 @@
+import { mergeChain } from './chain';
 import type { Snapshot, StockItem } from './contracts';
 import { canonicalCountry } from './travel';
 import type { InventorySnapshot, PageTravel, Purchase, ResourceBars, TravelApp, Trip, TripProfit } from './trip-model';
@@ -203,7 +204,7 @@ export function mergeSnapshot(previous: Snapshot | undefined, fresh: Snapshot, a
       tornValue: newerPrice ? stock.tornValue : old?.tornValue ?? stock.tornValue, priceObservedAt: newerPrice ? stock.priceObservedAt : old?.priceObservedAt ?? stock.priceObservedAt,
       restock: stock.restock.kind === 'unknown' && old?.restock.kind !== 'unknown' ? old?.restock ?? stock.restock : stock.restock });
   }
-  const snapshot = { ...fresh, travelApp: app, stocks: [...byId.values()], war: fresh.issues?.war ? previous?.war ?? fresh.war : fresh.war, chain: fresh.issues?.chain ? previous?.chain ?? fresh.chain : fresh.chain };
+  const snapshot = { ...fresh, travelApp: app, stocks: [...byId.values()], war: fresh.issues?.war ? previous?.war ?? fresh.war : fresh.war, chain: mergeChain(previous?.chain, fresh.issues?.chain ? previous?.chain ?? fresh.chain : fresh.chain, now) };
   mergePrices(app, snapshot.stocks);
   const t = app.travel;
   snapshot.travel = { active: t.state !== 'AT_HOME', origin: t.originCountry || 'Torn', destination: t.destinationCountry || 'Unknown destination',

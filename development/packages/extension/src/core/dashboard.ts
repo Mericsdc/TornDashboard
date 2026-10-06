@@ -1,6 +1,5 @@
 import { MODES, PRESETS, moveWidget, presetLayout, reconcileLayout, type Layout, type Mode, type PublicState, type Settings, type Snapshot, type WidgetId } from '@tcd/shared';
 import type { DashboardStore } from '../services/storage';
-import { TravelDock } from './travel-dock';
 import { Panels } from './panels';
 import { TornObserver } from './torn-observer';
 import { DragDrop } from './drag-drop';
@@ -14,7 +13,6 @@ import css from '../styles/dashboard.css';
 export class Dashboard {
   readonly events = new EventBus();
   private panels: Panels;
-  private dock: TravelDock;
   private observer: TornObserver;
   private manager: WidgetManager;
   private drag: DragDrop;
@@ -35,23 +33,22 @@ export class Dashboard {
     this.panels = new Panels(css, value => {
       if (MODES.includes(value as Mode)) void this.changeSettings({ mode: value as Mode, autoSwitching: false });
     }, () => { void store.openOptions().catch(error => this.error(error)); });
-    this.dock = new TravelDock(css);
     this.manager = new WidgetManager(this.panels, createRegistry(), (id, direction) => this.move(id, direction));
     this.drag = new DragDrop(this.panels.left, this.panels.right, state.settings.animation, layout => { this.persistLayout(layout); });
-    this.observer = new TornObserver(this.panels, this.dock.host, () => this.state.settings.panelWidth, () => this.render());
+    this.observer = new TornObserver(this.panels, () => this.state.settings.panelWidth, () => this.render());
     this.unsubscribe = store.subscribe((refreshData, clearAccount) => {
       if (clearAccount) this.snapshot = null;
       if (refreshData) { this.refreshGeneration++; this.pending = false; }
       void this.reload().then(() => { if (refreshData) void this.refresh(); }).catch(error => this.error(error));
     });
     this.events.on('error', message => { this.panels.error.hidden = false; this.panels.error.textContent = message; });
-    this.tick = setInterval(() => { if (!this.drag.dragging) this.manager.update(this.context()); this.dock.update(this.context()); void this.store.checkAlerts?.().catch(error => this.error(error)); }, 1000);
+    this.tick = setInterval(() => { if (!this.drag.dragging) this.manager.update(this.context()); void this.store.checkAlerts?.().catch(error => this.error(error)); }, 1000);
     this.polling = setInterval(() => { void this.refresh(); }, 15000);
     this.render(); void this.refresh();
   }
   static async mount(store: DashboardStore): Promise<Dashboard> { return new Dashboard(store, await store.load()); }
   private context(): WidgetContext {
-    return { state: this.state, snapshot: this.snapshot, now: Date.now(), mode: this.mode,
+    return { state: this.state, snapshot: this.snapshot ? {...this.snapshot,chain:this.store.nativeChain?.(this.snapshot.chain,Date.now()) ?? this.snapshot.chain} : null, now: Date.now(), mode: this.mode,
       openOptions: () => this.store.openOptions(), saveSettings: patch => this.changeSettings(patch), saveFavorites: async favorites => { try { this.state = await this.store.favorites(favorites); this.render(); } catch (error) { this.error(error); } } };
   }
   private async reload(): Promise<void> {
@@ -70,7 +67,7 @@ export class Dashboard {
     this.panels.apply({ ...this.state.settings, mode: this.mode }); this.drag.animation(this.state.settings.animation);
     this.panels.mode.title = this.state.settings.autoSwitching ? 'Automatic mode; choosing a preset switches to manual' : 'Manual preset';
     this.panels.status.textContent = this.snapshot?.source === 'mock' ? 'MOCK' : this.snapshot?.provider === 'torn' ? 'TORN API' : this.snapshot?.source === 'live' ? 'LIVE' : 'NO DATA';
-    this.manager.reconcile(presetLayout(this.layouts[this.mode], this.mode), this.context()); this.dock.update(this.context());
+    this.manager.reconcile(presetLayout(this.layouts[this.mode], this.mode), this.context());
     this.quickSettings(); this.observer.schedule();
   }
   private quickSettings(): void {
@@ -84,7 +81,7 @@ export class Dashboard {
     for(const [name,label] of [['autoSwitching','Automatic mode switching'],['rememberPositions','Remember positions'],['animation','Animations']] as const){const row=el('label','setting-row'),input=el('input');input.type='checkbox';input.checked=draft[name];input.addEventListener('change',()=>{draft[name]=input.checked;});row.append(input,el('span','',label));controls.push(row);}
     for(const [name,values] of [['density',['compact','comfortable']],['theme',['liquid-glass','torn-dark','slate']]] as const){const row=el('label','setting-row',name),select=el('select');select.setAttribute('aria-label',name);values.forEach(value=>{const option=el('option','',value);option.value=value;select.append(option);});select.value=draft[name];select.addEventListener('change',()=>{if(name==='density')draft.density=select.value as Settings['density'];else draft.theme=select.value as Settings['theme'];});row.append(select);controls.push(row);}
     const widgets=el('details');widgets.append(el('summary','','Widgets in this preset'));let layout=structuredClone(this.layouts[this.mode]);const mode=this.mode;
-    const allowed=new Set([...PRESETS[mode].left,...PRESETS[mode].right,...(mode==='TRAVEL'?['travel-market','travel-profit']:[])]);
+    const allowed=new Set([...PRESETS[mode].left,...PRESETS[mode].right]);
     for(const definition of createRegistry().all()){
       if(!allowed.has(definition.id))continue;
       const row=el('label','setting-row'),input=el('input');input.type='checkbox';input.checked=!draft.disabledWidgets.includes(definition.id);
@@ -122,6 +119,6 @@ export class Dashboard {
   }
   private error(error: unknown): void { void error; this.events.emit('error', this.snapshot ? 'Showing saved data. Refreshing…' : 'Waiting for travel data…'); }
   destroy(): void {
-    this.destroyed = true; clearInterval(this.tick); clearInterval(this.polling); this.unsubscribe(); this.observer.destroy(); this.drag.destroy(); this.manager.destroy(); this.panels.destroy(); this.dock.destroy(); this.events.destroy();
+    this.destroyed = true; clearInterval(this.tick); clearInterval(this.polling); this.unsubscribe(); this.observer.destroy(); this.drag.destroy(); this.manager.destroy(); this.panels.destroy(); this.events.destroy();
   }
 }

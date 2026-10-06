@@ -22,6 +22,16 @@ function network(extra:Record<string,unknown>={}){
   });
 }
 describe('direct Torn API adapter',()=>{
+  it('accounts for HTTP cache age without extending the returned chain deadline',async()=>{
+    const base=network(),request=vi.fn<typeof fetch>(async(input,options)=>{const response=await base(input,options);if(String(input).includes('faction/chain'))return new Response(await response.text(),{headers:{age:'3'}});return response;});
+    const data=await new TornApi('TESTONLYKEY12345',request,()=>now).snapshot('off',{});expect(data.chain?.expiresAt).toBe(now+27000);
+    const call=request.mock.calls.find(([url])=>String(url).includes('faction/chain'));expect(call?.[1]?.cache).toBe('no-store');
+  });
+  it('normalizes timeout-zero and completed API chains instead of keeping their hit meter active',async()=>{
+    for(const c of [{id:42,current:4,max:4,timeout:0,start:now/1000-500,end:0},{id:42,current:4,max:4,timeout:30,start:now/1000-500,end:now/1000-1}]){
+      const data=await new TornApi('TESTONLYKEY12345',network({'faction/chain':{chain:c}}),()=>now).snapshot('off',{});expect(data.chain).toMatchObject({status:'ended',count:0,goal:10,lastCount:4,expiresAt:null});
+    }
+  });
   it('loads the actual war opponent, chain and correct foreign catalog without leaking a key',async()=>{
     const request=network(),api=new TornApi('TESTONLYKEY12345',request,()=>now);
     const data=await api.snapshot('yata',{}, {origin:'Dubai',destination:'Torn',observedAt:now});
@@ -101,7 +111,7 @@ describe('presets, migration and travel shopping',()=>{
   });
   it('moves legacy extra widgets to CUSTOM and keeps watches and appearance',()=>{
     const old=defaultState();old.settings.panelWidth=340;old.favorites=[{itemId:1,country:'UAE',name:'Camel Plushie',minimumStock:10,alert:true}];old.layouts.WAR.right.push('restock');delete (old.layouts as Partial<typeof old.layouts>).CUSTOM;
-    const migrated=migrateState(old);expect(migrated.settings.panelWidth).toBe(340);expect(migrated.favorites).toEqual(old.favorites);expect(migrated.layouts.WAR).toEqual({left:['chain'],right:['recommended-targets']});expect(migrated.layouts.CUSTOM.right).toContain('restock');expect(presetLayout(old.layouts.WAR,'WAR').right).not.toContain('restock');
+    const migrated=migrateState(old);expect(migrated.settings.panelWidth).toBe(340);expect(migrated.favorites).toEqual(old.favorites);expect(migrated.layouts.WAR).toEqual({left:['chain'],right:['recommended-targets']});expect(migrated.layouts.CUSTOM.right).toContain('travel-favorites');expect(presetLayout(old.layouts.WAR,'WAR').right).not.toContain('restock');
   });
   it('maximizes profit with bounded stock and budget, including mixed bags and fees',()=>{
     const rows=[item({stock:1,cost:10,tornValue:100}),item({itemId:2,stock:20,cost:5,tornValue:50})];

@@ -3,12 +3,9 @@ import { warStatus } from '../widgets/war-status';
 import { recommendedTargets } from '../widgets/recommended-targets';
 import { hospitalTimers } from '../widgets/hospital-timers';
 import { chain } from '../widgets/chain';
-import { travelStatus } from '../widgets/travel-status';
 import { travelFavorites } from '../widgets/travel-favorites';
-import { travelMarket } from '../widgets/travel-market';
 import { travelProfit } from '../widgets/travel-profit';
 import { companyAddiction } from '../widgets/company-addiction';
-import { restock } from '../widgets/restock';
 export interface WidgetContext { state: PublicState; snapshot: Snapshot | null; now: number; mode: Mode; openOptions?: () => Promise<void>; saveSettings: (patch: Partial<PublicState['settings']>) => Promise<void>; saveFavorites: (state: PublicState['favorites']) => Promise<void> }
 export interface WidgetDefinition {
   id: WidgetId; title: string; defaultPosition: Position; defaultOrder: number; modes: readonly Mode[];
@@ -25,5 +22,5 @@ export class WidgetRegistry {
   all(): WidgetDefinition[] { return [...this.definitions.values()].sort((a, b) => a.defaultOrder - b.defaultOrder); }
 }
 export function createRegistry(): WidgetRegistry {
-  const registry = new WidgetRegistry(); [warStatus, recommendedTargets, hospitalTimers, chain, travelStatus, travelFavorites, restock, travelMarket, travelProfit, companyAddiction].forEach(v => registry.register(v)); return registry;
+  const registry = new WidgetRegistry(); [warStatus, recommendedTargets, hospitalTimers, chain, travelFavorites, travelProfit, companyAddiction].forEach(v => registry.register(v)); return registry;
 }

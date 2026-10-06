@@ -1,6 +1,6 @@
 # TornDashboard
 
-Kişisel Torn API anahtarıyla çalışan, Liquid Glass görünümlü Manifest V3 Chrome eklentisi. Seyahat, ülkeye ait ürünler, otomatik seyahat kârı, favori stok uyarıları ve savaş hedeflerini gösterir. Stok gözlemleri isteğe bağlı, hesap gerektirmeyen YATA servisinden gelir. BOSBOT üyeliği veya sunucu bağlantısı gerekmez.
+Kişisel Torn API anahtarıyla çalışan, Liquid Glass görünümlü Manifest V3 Chrome eklentisi. Kompakt yan panellerde chain, savaş hedefleri, takip edilen stoklar ve otomatik seyahat kârı gösterir. Stok gözlemleri isteğe bağlı, hesap gerektirmeyen YATA servisinden gelir. BOSBOT üyeliği veya sunucu bağlantısı gerekmez.
 
 ## Chrome’da güncelleme ve bağlantı
 
@@ -15,23 +15,23 @@ Options → **Personal Torn API** bölümüne kendi anahtarını gir → **Conne
 ## Kullanım
 
 - **WAR:** yalnızca Chain ve Recommended Targets. Aktif ranked war’ın rakip faction’ı Torn API’den otomatik yüklenir. Hospital/seyahat durumları hedef sıralamasında dikkate alınır. Battle stats ve fair fight verisi yoksa `unknown` kalır.
-- **TRAVEL:** seyahat durumu, destinasyona ait takip edilen ürünler ve restock. **Travel Market / Shop Assistant / Trip Profit + Landing Summary** seyahatin aşamasına göre değişir. Chain gösterilmez. Dönüşte “Dubai → Torn” rotası UAE ürünlerine eşlenir; bilinmeyen destinasyon başka ülkelerin ürünlerini açmaz.
-- **NORMAL:** chain, gruplu favoriler/restock ve doğrulanmış şirket direktörüne çalışan addiction verimlilik etkisi.
+- **TRAVEL:** sağda tek **Watched Products** kartı stok, ürün başına tahmini kâr ve restock penceresini birleştirir. Alışveriş kaydedilince solda kompakt **Trip Profit** görünür; ayrıntılar isteğe bağlı açılır. Ortadaki Travel Market ve tekrar eden Travel Status kaldırılmıştır. Torn’ın oyun alanı ve uçuş sayacı değiştirilmez. Chain gösterilmez. Dönüşte yabancı ülkenin stok bağlamı korunur.
+- **NORMAL:** chain, birleşik stok takibi ve doğrulanmış şirket direktörüne çalışan addiction verimlilik etkisi.
 - **CUSTOM:** widgetları serbest seç; seyahat panelleri aktif tur/ülke bağlamını korur.
 
 **Arrange** ile sürükleme/taşıma kontrollerini aç; **Done** ile kapat. Her preset kendi sıralamasını hatırlar. Comfortable yalnızca boşluk ve okunabilirliği artırır. İstenen genişlik boş alanın boyutuna uyarlanır; 340 px yer bulamazsa panel daralır. Gerekirse tek kenarda sıralanır; dar ekranda sayfanın üstüne geçer.
 
-Görünüm, genişlik, düzen ve otomatik mod ayarları yalnızca Torn içindeki **⚙ → Save settings** ile uygulanır. Options’da API, stok kaynağı, tek seferlik kapasite yedeği ve uyarılar için ayrı kayıt düğmesi vardır; görünüm bölümü kaldırılmıştır. Options’da kayıt almak Torn içindeki görünüm tercihlerini değiştirmez. Ürün arama, kategori, stokta olanlar, favoriler ve sıralama filtreleri kalıcıdır. Takip edilen ürünler ülke ve ürün türüne göre gruplanır; stok eşiği/uyarı her ürün için düzenlenir.
+Görünüm, genişlik, düzen ve otomatik mod ayarları yalnızca Torn içindeki **⚙ → Save settings** ile uygulanır. Options’da API, stok kaynağı, tek seferlik kapasite yedeği ve uyarılar için ayrı kayıt düğmesi vardır; görünüm bölümü kaldırılmıştır. Options’da kayıt almak Torn içindeki görünüm tercihlerini değiştirmez. Takip edilecek ürünler Options’da ülke ve tür gruplarından seçilir. Stok eşiği/uyarı her ürün için düzenlenir. Eski Market, Travel Status ve Restock widget seçimleri yeni düzene güvenle taşınır; favoriler ve diğer görünüm tercihleri korunur.
 
-**0.5.0 — otomatik Travel:** AT_HOME, OUTBOUND, ABROAD, RETURNING ve LANDED aşamaları kalıcı tur kaydıyla yönetilir. Dönüşte hedef Torn olurken market/restock ülkesi yabancı ülke olarak kalır. Yenileme, sayfa geçişi, Chrome yeniden başlatma veya geçici API hatası turu silmez.
+**0.5.1 — kompakt Travel:** AT_HOME, OUTBOUND, ABROAD, RETURNING ve LANDED aşamaları kalıcı tur kaydıyla yönetilir. Dönüşte hedef Torn olurken market/restock ülkesi yabancı ülke olarak kalır. Yenileme, sayfa geçişi, Chrome yeniden başlatma veya geçici API hatası turu silmez.
 
 Eski manuel hesaplayıcı kaldırıldı. **Trip Profit**, doğrulanmış alışverişleri tek tek kaydeder; maliyet, Torn piyasa değeri, tahmini kâr, ROI ve bilinen tur süresinden saatlik kâr otomatik hesaplanır. Çantanın toplamı önce Torn sayfasından, sonra önceki bilinen değerden / seyahat yönteminden / uygun perklerden belirlenir. Algılama başarısızsa Options’da toplam kapasiteyi bir kez girebilirsin. Envanter farkı hediyeleri veya transferleri otomatik alışveriş saymaz; Torn inventory verisi bir saat önbelleklidir.
 
 Eski fiyat sayısal değerini korur, yaşı ve güven seviyesi gösterilir. YATA stokları ortak gözlemdir; eski miktarlar son gözlem olarak kalır ve güncel stok uyarısı oluşturmaz. Restock en az üç gözlenen sıfır→pozitif geçişten tahmin edilir. **Travel History** Options’da son 30 gün özetini ve tamamlanan turları gösterir; 90 gün / 100 tur sınırı vardır. Gerçek satış geliri bu sürümde turla güvenilir şekilde eşlenmediği için **Actual profit** ayrı ve doğrulanmamış kalır.
 
-Chain 30 saniyede ses ve Chrome bildirimi verir. Takip edilen stok eşik altından üstüne geçtiğinde uyarır. Chrome açık/uyanık olmalıdır. **Test warning sound** ile kontrol et.
+Chain görünür Torn sidebar’ından eşitlenir; aktif sayaç değişimleri ve uyarı eşiği gözlenir. API yalnızca yedektir; HTTP cache yaşı hesaba katılır. Süre dolduğunda **Chain ended**, `0 / 10` gösterilir ve eski ilerleme çubuğu kaldırılır. Chain 30 saniyede bir kez ses ve Chrome bildirimi verir. Takip edilen stok eşik altından üstüne geçtiğinde uyarır. Chrome açık/uyanık olmalıdır. **Test warning sound** ile kontrol et.
 
-[Travel mimarisi, değişen dosyalar, API sınırları ve 9 adımlı gerçek seyahat kontrol listesi](development/docs/TRAVEL-REFACTOR.md).
+[Chain düzeltmesi ve kompakt Travel değişiklikleri / kontrol listesi](development/docs/COMPACT-TRAVEL.md). Kalıcı tur ve alışveriş motorunun ayrıntıları [Travel raporunda](development/docs/TRAVEL-REFACTOR.md).
 
 ## Geliştirme ve aynı klasöre güncelleme
 
@@ -53,6 +53,6 @@ npm run preview
 
 `http://127.0.0.1:4319/?sid=travel` etiketli MOCK görsel demodur. Gerçek veriler yüklenen Chrome eklentisinde kullanılır. Kaynak/testler `development` altındadır. İsteğe bağlı Fastify/PostgreSQL/Redis geliştirme servisi canlı eklentinin veri yolunda değildir.
 
-GitHub’dan yeni kodu almak: `git pull --ff-only`, `npm run setup`, `npm run update`; sonra Chrome Reload. Sonraki sürüm örneği: `npm run version:set -- 0.5.1`, kontroller, commit/push ve eşleşen `v0.5.1` etiketi. GitHub Actions doğrulayıp **TornDashboard.zip** release dosyasını oluşturur. Unpacked eklenti GitHub’dan otomatik güncellenmez; mağaza üzerinden otomatik dağıtım için aynı Chrome Web Store kaydı kullanılmalıdır.
+GitHub’dan yeni kodu almak: `git pull --ff-only`, `npm run setup`, `npm run update`; sonra Chrome Reload. Sonraki sürüm örneği: `npm run version:set -- 0.5.2`, kontroller, commit/push ve eşleşen `v0.5.2` etiketi. GitHub Actions doğrulayıp **TornDashboard.zip** release dosyasını oluşturur. Unpacked eklenti GitHub’dan otomatik güncellenmez; mağaza üzerinden otomatik dağıtım için aynı Chrome Web Store kaydı kullanılmalıdır.
 
 [Kaynak mimarisi](development/docs/ARCHITECTURE.md) · [Güvenlik](development/docs/SECURITY.md) · [Doğrulama](development/docs/VERIFICATION.md) · [Torn API resmi sözleşmesi](https://www.torn.com/swagger.php) · [YATA ortak stok servisi](https://yata.yt/api/v1/travel/export/)

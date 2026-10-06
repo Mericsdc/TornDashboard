@@ -1,4 +1,4 @@
-import { SnapshotSchema, TravelAppSchema, PurchaseSchema, emptyTravelApp, observeTravel, applyPageTravel, mergePrices, recordInventory, recordPurchase, finalizeDerived, mergeSnapshot, type Snapshot, type PublicState, type Purchase, type PageTravel, type StockObservation, estimateRestock, canonicalCountry } from '@tcd/shared';
+import { SnapshotSchema, TravelAppSchema, PurchaseSchema, emptyTravelApp, observeTravel, applyPageTravel, mergePrices, recordInventory, recordPurchase, finalizeDerived, mergeSnapshot, type Snapshot, type PublicState, type Purchase, type PageTravel, type StockObservation, estimateRestock, canonicalCountry, currentChain, pageChain, type ChainObservation } from '@tcd/shared';
 import { TornApi } from '../services/torn-api';
 import { requireTornAccess } from '../services/torn-connection';
 type Auth = { key: string; userId: number };
@@ -33,6 +33,7 @@ export class TravelDataStore {
   private current(state: PublicState): Snapshot {
     const snapshot = this.bundle!.snapshot, app = snapshot.travelApp!;
     finalizeDerived(app, Date.now(), state.settings.travelCapacityOverride);
+    snapshot.chain = currentChain(snapshot.chain, Date.now());
     const t = app.travel;
     snapshot.travel = { active: t.state !== 'AT_HOME', origin: t.originCountry || 'Torn', destination: t.destinationCountry || 'Torn',
       arrivesAt: t.arrivalAt, departedAt: t.departedAt, observedAt: t.observedAt ?? undefined, state: t.state, capacity: app.bag.total };
@@ -48,6 +49,14 @@ export class TravelDataStore {
     if (before !== JSON.stringify([snapshot.travelApp!.travel, snapshot.travelApp!.history.length])) { await this.persist(); await this.changed(); }
     if (revalidate) this.requestRefresh(state);
     return snapshot;
+  }
+  async chain(state: PublicState, observation: ChainObservation): Promise<Snapshot | null> {
+    const auth = await this.credential(); if (!auth) return null;
+    await this.load(auth);
+    const chain = pageChain(this.bundle!.snapshot.chain, observation, Date.now()); if (!chain) return null;
+    this.bundle!.snapshot.chain = chain;
+    const snapshot = this.current(state); await this.persist();
+    await this.alerts(snapshot, state, auth.userId); await this.changed(); return snapshot;
   }
   async page(state: PublicState, observation: PageTravel): Promise<Snapshot> {
     const auth = await this.credential(); if (!auth) return this.read(state);

@@ -1,4 +1,4 @@
-import { emptyAlertMemory, evaluateAlerts, type AlertMemory, type PublicState, type Snapshot } from '@tcd/shared';
+import { currentChain, emptyAlertMemory, evaluateAlerts, type AlertMemory, type PublicState, type Snapshot } from '@tcd/shared';
 const ICON = chrome.runtime.getURL('icon.png');
 let creating: Promise<void> | undefined;
 export async function playWarning(): Promise<void> {
@@ -24,7 +24,7 @@ async function deliverAlerts(snapshot: Snapshot, state: PublicState, scope: stri
     const failed = outcomes.some(result => result.status === 'rejected');
     await chrome.storage.local.set({ alertDelivery: { at: Date.now(), title: event.title, failed, notificationFailed: outcomes[0]?.status === 'rejected', soundFailed: outcomes[1]?.status === 'rejected', reason: outcomes.filter((result): result is PromiseRejectedResult => result.status === 'rejected').map(result => result.reason instanceof Error ? result.reason.message : 'Alert delivery unavailable').join(' · ').slice(0,200) } });
   }
-  const chain = snapshot.chain, now = Date.now();
+  const now = Date.now(), chain = currentChain(snapshot.chain, now);
   const warnAt = chain?.expiresAt ? chain.expiresAt - 30000 : 0;
   if (state.settings.alerts.chain && chain?.count && warnAt > now && chain.observedAt && now - chain.observedAt <= 45000) {
     const existing = await chrome.alarms.get('chain-warning');

@@ -1,3 +1,4 @@
+import { currentChain } from './chain';
 import { freshStock } from './travel';
 import type { PublicState, Snapshot } from './contracts';
 export type AlertEvent = { key: string; title: string; message: string };
@@ -7,7 +8,7 @@ export function evaluateAlerts(snapshot: Snapshot, state: PublicState, previous:
   const memory = structuredClone(previous), events: AlertEvent[] = [];
   const emit = (event: AlertEvent) => { if (!memory.seen.includes(event.key)) { memory.seen.push(event.key); events.push(event); } };
   if (snapshot.source !== 'live' || !['bosbot', 'torn'].includes(snapshot.provider || '')) return { memory, events };
-  const chain = snapshot.chain;
+  const chain = currentChain(snapshot.chain, now);
   if (state.settings.alerts.chain && chain?.count && chain.expiresAt && chain.observedAt && now - chain.observedAt >= -30000 && now - chain.observedAt <= 45000 && chain.expiresAt - now > 0 && chain.expiresAt - now <= 30000) {
     emit({ key: `chain:${chain.id || chain.startedAt || 'active'}:${chain.count}`, title: 'Chain · 30 seconds remaining', message: `${chain.count} hits · ${Math.ceil((chain.expiresAt - now) / 1000)} seconds to keep the chain alive.` });
   }

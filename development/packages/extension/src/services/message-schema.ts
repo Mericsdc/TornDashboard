@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { FavoriteSchema, LayoutSchema, MODES, SettingsSchema, COUNTRIES, PageTravelSchema } from '@tcd/shared';
+const ChainObservationSchema=z.object({count:z.number().int().min(0).max(1000000),goal:z.number().int().min(1).max(1000000),remaining:z.number().int().min(0).max(600),at:z.number().int().nonnegative()}).strict();
 export const MessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('READ_STATE') }).strict(), z.object({ type: z.literal('GET_SNAPSHOT') }).strict(),
   z.object({ type: z.literal('SAVE_SETTINGS'), patch: SettingsSchema.omit({ bosbotUrl: true, alerts: true, market: true, stockProvider: true, bag: true, travelCapacityOverride: true }).partial().extend({ travelCapacityOverride: SettingsSchema.shape.travelCapacityOverride.removeDefault().optional(), alerts: SettingsSchema.shape.alerts.removeDefault().optional(), market: SettingsSchema.shape.market.removeDefault().optional(), stockProvider: SettingsSchema.shape.stockProvider.removeDefault().optional(), bag: SettingsSchema.shape.bag.removeDefault().optional() }).strict() }).strict(),
@@ -8,6 +9,7 @@ export const MessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('SAVE_KEY'), key: z.string().regex(/^[a-zA-Z0-9]{16}$/), remember: z.boolean() }).strict(),
   z.object({ type: z.literal('KEY_STATUS') }).strict(), z.object({ type: z.literal('DISCONNECT_KEY') }).strict(),
   z.object({ type: z.literal('TEST_CONNECTION') }).strict(),
+  z.object({ type: z.literal('CHAIN_OBSERVATION'), observation: ChainObservationSchema }).strict(),
   z.object({ type: z.literal('TRAVEL_OBSERVATION'), observation: PageTravelSchema }).strict(),
   z.object({ type: z.literal('TRAVEL_HINT'), origin: z.enum([...COUNTRIES, 'Torn']), destination: z.enum([...COUNTRIES, 'Torn']) }).strict(),
   z.object({ type: z.literal('OPEN_OPTIONS') }).strict(), z.object({ type: z.literal('REFRESH_DATA') }).strict(), z.object({ type: z.literal('CHECK_ALERTS') }).strict(), z.object({ type: z.literal('TEST_SOUND') }).strict(), z.object({ type: z.literal('RESET_STATE') }).strict()

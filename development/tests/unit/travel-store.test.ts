@@ -18,6 +18,15 @@ function setup(){
   return{store,raw,api,changed,alerts,snapshot,setAuth:(id:number)=>{auth={key:'OTHERTESTKEY1234',userId:id};},release:(s:Snapshot)=>release!(s)};
 }
 describe('owner-scoped cache-first travel data layer',()=>{
+  it('persists native chain correction and rejects a delayed API revival after native expiry',async()=>{
+    const s=setup(),state=defaultState();await s.store.read(state,false);
+    const before={id:42,count:4,goal:10,expiresAt:now+15000,observedAt:now,source:'api' as const};
+    const corrected=await s.store.chain(state,{count:4,goal:10,remaining:12,at:now});expect(corrected?.chain?.expiresAt).toBe(now+12000);
+    await s.store.read(state);await vi.waitFor(()=>expect(s.api.snapshot).toHaveBeenCalledTimes(1));
+    await s.store.chain(state,{count:0,goal:10,remaining:0,at:now});
+    s.release({...s.snapshot,chain:before});await vi.waitFor(()=>expect(s.alerts.mock.calls.length).toBeGreaterThan(2));
+    s.store.reset();const resumed=await s.store.read(state,false);expect(resumed.chain).toMatchObject({count:0,status:'ended',source:'page'});
+  });
   it('returns cached state before revalidation and coalesces concurrent reads across tabs',async()=>{
     const s=setup(),state=defaultState();const first=await s.store.read(state);expect(first.travelApp?.travel).toMatchObject({state:'RETURNING',originCountry:'Japan',marketContextCountry:'Japan'});expect(first.travelApp?.tripProfit?.estimatedProfit).toBe(60000);
     await s.store.read(state);await s.store.read(state);await vi.waitFor(()=>expect(s.api.snapshot).toHaveBeenCalledTimes(1));

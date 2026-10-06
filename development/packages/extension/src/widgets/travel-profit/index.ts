@@ -1,7 +1,7 @@
 import { tripProfit, type Trip, type TravelApp } from '@tcd/shared';
 import { widget } from '../base';
 import { duration, el, note, stat } from '../../core/dom';
-import { money, priceAge } from '../travel-market';
+import { money, priceAge } from '../../core/format';
 export const signedMoney = (value: number | null | undefined) => value === null || value === undefined ? 'Waiting for price…' : `${value < 0 ? '−' : '+'}${money(Math.abs(value))}`;
 export function profitNodes(trip: Trip, app: TravelApp, now: number): HTMLElement[] {
   const profit = tripProfit(trip, app, now), nodes: HTMLElement[] = [];
@@ -38,7 +38,15 @@ export function profitNodes(trip: Trip, app: TravelApp, now: number): HTMLElemen
   if (trip.baselineMissing) nodes.push(note('This trip was first observed after departure. Inventory comparison may be incomplete; confirmed receipts are still usable.'));
   return nodes;
 }
-export const travelProfit = widget({id:'travel-profit',title:'Trip Profit',defaultPosition:'right',defaultOrder:58,modes:['TRAVEL']},ctx=>{
-  const app=ctx.snapshot?.travelApp;
-  return app?.travelSession ? profitNodes(app.travelSession,app,ctx.now) : [note('Waiting for travel data…')];
+export const travelProfit = widget({id:'travel-profit',title:'Trip Profit',defaultPosition:'left',defaultOrder:58,modes:['TRAVEL'],
+  visible:ctx=>Boolean(ctx.snapshot?.travelApp?.travelSession?.purchases.length)},ctx=>{
+  const app=ctx.snapshot!.travelApp!,trip=app.travelSession!,profit=tripProfit(trip,app,ctx.now);
+  const details=el('details','trip-details');details.append(el('summary','','Purchase details'),...profitNodes(trip,app,ctx.now));
+  const nodes:Node[]=[note(`${trip.country} · ${profit.rows.reduce((n,r)=>n+r.quantity,0)} purchased`),
+    el('strong','compact-profit',signedMoney(profit.estimatedProfit)),note(`Estimated · ${profit.confidence} confidence`),
+    stat('Spent',money(profit.spent)),stat('Torn value',money(profit.marketValue))];
+  if(profit.roi!==null)nodes.push(stat('ROI',`${profit.roi.toFixed(1)}%`));
+  if(app.travel.state==='ABROAD'&&app.bag.total!==null)nodes.push(stat('Bag',`${app.bag.used??'—'} / ${app.bag.total}`));
+  if(profit.profitPerHour!==null)nodes.push(stat('Profit / hour',signedMoney(profit.profitPerHour)));
+  nodes.push(details);return nodes;
 });

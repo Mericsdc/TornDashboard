@@ -34,7 +34,7 @@ export class Panels {
   apply(settings: Settings): void {
     this.host.style.setProperty('--panel-width', `${settings.panelWidth}px`); this.host.style.setProperty('--panel-opacity', String(settings.opacity));
     this.host.style.setProperty('--widget-gap', `${settings.gap}px`); this.dashboard.dataset.theme = settings.theme;
-    this.dashboard.dataset.density = settings.density; this.dashboard.dataset.animation = String(settings.animation); this.mode.value = settings.mode; this.rightHeading.textContent = settings.mode === 'WAR' ? 'TARGETS' : settings.mode === 'TRAVEL' ? 'WATCHED PRODUCTS' : settings.mode === 'CUSTOM' ? 'CUSTOM' : 'PERSONAL';
+    this.dashboard.dataset.density = settings.density; this.dashboard.dataset.animation = String(settings.animation); this.mode.value = settings.mode; this.rightHeading.textContent = settings.mode === 'WAR' ? 'TARGETS' : settings.mode === 'TRAVEL' ? 'TRAVEL' : settings.mode === 'CUSTOM' ? 'CUSTOM' : 'PERSONAL';
   }
   destroy(): void { this.host.remove(); }
 }

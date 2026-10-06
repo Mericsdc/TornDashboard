@@ -11,11 +11,11 @@ let queue: Promise<unknown> = ready, api: TornApi | undefined, cached: Snapshot 
 let cachedOwner: number | undefined;
 type Credential = { key: string; userId: number; remember: boolean };
 async function readState(): Promise<PublicState> {
-  const raw = await chrome.storage.local.get(['state', 'personalApiV4']);
+  const raw = await chrome.storage.local.get(['state', 'personalApiV4', 'compactTravelV5']);
   const valid = StateSchema.safeParse(raw.state);
-  if (raw.personalApiV4 && valid.success) return valid.data;
+  if (raw.personalApiV4 && raw.compactTravelV5 && valid.success) return valid.data;
   const state = migrateState(raw.state);
-  await chrome.storage.local.set({ state, personalApiV4: true });
+  await chrome.storage.local.set({ state, personalApiV4: true, compactTravelV5: true });
   await chrome.storage.local.remove(['bosbotDevice', 'bosbotOnlyV3']); await chrome.storage.session.remove(['bosbotPair', 'credentials']);
   return state;
 }
@@ -52,6 +52,7 @@ async function handle(raw: unknown, sender: chrome.runtime.MessageSender): Promi
     case 'READ_STATE': return state;
     case 'GET_SNAPSHOT': return snapshot(state);
     case 'TRAVEL_HINT': if ('origin' in message && 'destination' in message) return travelData.page(state, { state: message.destination === 'Torn' ? 'RETURNING' : 'OUTBOUND', originCountry: message.origin, destinationCountry: message.destination }); return null;
+    case 'CHAIN_OBSERVATION': return travelData.chain(state, message.observation);
     case 'TRAVEL_OBSERVATION': return travelData.page(state, message.observation);
     case 'CHECK_ALERTS': { const auth = await credential(); if (cached && auth && cachedOwner === auth.userId) await processAlerts(cached, state, `torn/${auth.userId}`); return null; }
     case 'SAVE_KEY': {

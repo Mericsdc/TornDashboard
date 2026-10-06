@@ -42,6 +42,35 @@ async function mockTorn(context:BrowserContext,state:{travel:boolean;director?:b
 
 async function isolatedContext(context:BrowserContext,page:import('@playwright/test').Page){const cdp=await context.newCDPSession(page);let isolated=0;cdp.on('Runtime.executionContextCreated',event=>{if(event.context.auxData?.type==='isolated'&&!event.context.name.startsWith('__playwright'))isolated=event.context.id;});await cdp.send('Runtime.enable');await expect.poll(()=>isolated).toBeGreaterThan(0);return{cdp,isolated};}
 
+test('native Torn chain corrects API drift, warns once and resets on zero or elapsed time',async()=>{
+  test.setTimeout(60000);const profile=await mkdtemp(join(tmpdir(),'torndashboard-native-chain-')),context=await launch(profile);
+  try{
+    const worker=await mockTorn(context,{travel:false,chainTimeout:60}),id=new URL(worker.url()).hostname;
+    const options=await context.newPage();await options.goto(`chrome-extension://${id}/options.html`);await options.getByLabel('Torn API key').fill(TEST_KEY);await options.getByRole('button',{name:'Connect Torn API',exact:true}).click();await expect(options.locator('#key-status')).toContainText('#55');
+    const page=await context.newPage();await page.goto('https://www.torn.com/index.php');const card=page.locator('#tcd-dashboard [data-widget-id="chain"]');await expect(card).toContainText('49 / 50');
+    await page.evaluate(()=>{const row=document.createElement('div');row.id='native-chain';row.innerHTML='<p class="barName___"><span>Chain:</span><strong id="native-count">4/10</strong><span id="native-timer">00:12</span></p>';document.querySelector('.sidebar .side-content')!.append(row);});
+    await expect(card).toContainText('4 / 10');await expect(card).toContainText('Synced with Torn');
+    const remaining=()=>card.locator('.stat').filter({hasText:'Remaining'}).locator('strong').textContent();
+    await expect.poll(async()=>Number((await remaining())?.split(':').at(-1))).toBeLessThanOrEqual(12);
+    await expect(card.locator('.chain-warning')).toBeVisible();await expect.poll(async()=>((await worker.evaluate(async()=>chrome.storage.local.get<{alertState:{memory:{seen:string[]}}}>('alertState'))).alertState?.memory.seen||[]).filter(k=>k.startsWith('chain:')).length).toBe(1);
+    await worker.evaluate(()=>{const g=globalThis as unknown as {nativeMessages:unknown[]};g.nativeMessages=[];chrome.runtime.onMessage.addListener(message=>{if(message?.type==='CHAIN_OBSERVATION')g.nativeMessages.push(message.observation);});});
+    await page.evaluate(()=>{document.querySelector('#native-count')!.textContent='0/10';document.querySelector('#native-timer')!.textContent='00:00';});
+    await expect(card).toContainText('Chain ended');await expect(card).toContainText('0 / 10');await expect(card.locator('progress')).toHaveCount(0);await expect(card.locator('.chain-warning')).toHaveCount(0);
+    await page.evaluate(()=>{const node=document.createElement('span');node.id='clock-noise';document.body.append(node);const g=window as unknown as {noise:number};g.noise=window.setInterval(()=>{node.textContent=String(Date.now());},100);});
+    await expect.poll(async()=>((await worker.evaluate(()=>(globalThis as unknown as {fixtureCalls:string[]}).fixtureCalls)).filter(path=>path==='faction/chain').length),{timeout:20000}).toBeGreaterThanOrEqual(2);
+    await expect(card).toContainText('Chain ended');await expect(card).toContainText('0 / 10');
+    await expect.poll(async()=>(await worker.evaluate(async()=>chrome.storage.local.get<{travelDataV1:{snapshot:{chain:{count:number}}}}>('travelDataV1'))).travelDataV1.snapshot.chain.count).toBe(0);
+    expect(await worker.evaluate(()=>(globalThis as unknown as {nativeMessages:unknown[]}).nativeMessages.length)).toBeLessThanOrEqual(4);
+    await page.evaluate(()=>window.clearInterval((window as unknown as {noise:number}).noise));
+    await page.screenshot({path:resolve('docs/chain-ended-preview.png'),fullPage:true});
+    await page.evaluate(()=>{document.querySelector('#native-count')!.textContent='1/10';document.querySelector('#native-timer')!.textContent='00:02';});await expect(card).toContainText('1 / 10');
+    // A frozen native row and a failed API must not keep an elapsed chain active.
+    await worker.evaluate(()=>{globalThis.fetch=async()=>new Response('private',{status:503});});
+    await expect(card).toContainText('Chain ended',{timeout:6000});await expect(card).toContainText('0 / 10');await expect(card.locator('progress')).toHaveCount(0);
+    await expect.poll(async()=>((await worker.evaluate(async()=>chrome.storage.local.get<{alertState:{memory:{seen:string[]}}}>('alertState'))).alertState?.memory.seen||[]).filter(k=>k.startsWith('chain:')).length).toBe(2);
+  }finally{await context.close();await rm(profile,{recursive:true,force:true});}
+});
+
 test('Chrome host access, connection retry and anonymous diagnosis protect key setup',async()=>{
   const profile=await mkdtemp(join(tmpdir(),'torndashboard-connection-profile-')),context=await launch(profile);
   try{
@@ -65,7 +94,7 @@ test('Chrome host access, connection retry and anonymous diagnosis protect key s
   }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });
 
-test('responsive preview, explicit save, separated arrangement and SPA dock recovery',async({page})=>{
+test('responsive preview, explicit save, separated arrangement and SPA panel recovery',async({page})=>{
   await page.goto('/');const host=page.locator('#tcd-dashboard');await expect(host).toHaveAttribute('data-placement','gutters');await expect(host.locator('.widget-card')).toHaveCount(2);
   await host.getByLabel('Panel settings').click();await host.getByLabel('Width',{exact:true}).fill('340');await host.getByLabel('density',{exact:true}).selectOption('comfortable');await host.getByLabel('theme',{exact:true}).selectOption('slate');
   await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','liquid-glass');await host.getByRole('button',{name:'Save settings',exact:true}).click();await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
@@ -74,7 +103,7 @@ test('responsive preview, explicit save, separated arrangement and SPA dock reco
   await host.getByLabel('Arrange widgets',{exact:true}).click();await expect(host.getByLabel('Drag Chain',{exact:true})).toBeVisible();await host.getByLabel('Arrange widgets',{exact:true}).click();
   await page.reload();await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
   await page.getByRole('button',{name:'Simulate SPA navigation'}).click();await expect(host).toHaveCount(1);await expect(host.getByLabel('Dashboard preset')).toHaveValue('TRAVEL');await expect(host.locator('[data-widget-id="chain"]')).toHaveCount(0);
-  const dock=page.locator('#tcd-travel-dock');await expect(dock).toHaveCount(1);await expect(dock).toBeVisible();await expect(dock.locator('.widget-card')).toHaveCount(1);await expect(page.locator('main #tcd-travel-dock')).toHaveCount(1);
+  await expect(page.locator('#tcd-travel-dock')).toHaveCount(0);await expect(host.locator('[data-widget-id="travel-status"]')).toHaveCount(0);await expect(host.locator('[data-widget-id="restock"]')).toHaveCount(0);await expect(host.locator('[data-widget-id="travel-favorites"]')).toHaveCount(1);
   await page.setViewportSize({width:760,height:900});await expect(host).toHaveAttribute('data-placement','inline');const main=await page.locator('main').boundingBox(),dashboard=await host.boundingBox();expect(dashboard!.y).toBeLessThan(main!.y);
 });
 
@@ -98,14 +127,14 @@ test('legacy BOS state migrates, saves dragging and keeps personal credentials o
     await context.route('https://www.torn.com/**',async route=>route.fulfill({body:await fixture(),contentType:'text/html'}));
     const page=await context.newPage();await page.goto('https://www.torn.com/index.php');const host=page.locator('#tcd-dashboard');await expect(host.locator('.source-badge')).toHaveText('NO DATA');await host.getByLabel('Dashboard preset').selectOption('WAR');await expect(host.locator('.widget-card')).toHaveCount(2);await host.getByLabel('Arrange widgets').click();
     const left=host.locator('.widget-list[data-side="left"]'),right=host.locator('.widget-list[data-side="right"]'),handle=await right.getByLabel('Drag Recommended Targets',{exact:true}).boundingBox(),destination=await left.boundingBox();
-    await page.mouse.move(handle!.x+handle!.width/2,handle!.y+handle!.height/2);await page.mouse.down();await page.mouse.move(handle!.x+handle!.width/2+15,handle!.y+handle!.height/2,{steps:4});await page.mouse.move(destination!.x+destination!.width/2,destination!.y+destination!.height-10,{steps:30});await page.mouse.up();
+    await page.mouse.move(handle!.x+handle!.width/2,handle!.y+handle!.height/2);await page.mouse.down();await page.mouse.move(handle!.x+handle!.width/2+15,handle!.y+handle!.height/2,{steps:4});await page.mouse.move(destination!.x+destination!.width/2,destination!.y+destination!.height-10,{steps:30});await expect(left.locator('[data-widget-id="recommended-targets"]')).toHaveCount(1);await page.mouse.up();
     await expect(left.locator('[data-widget-id="recommended-targets"]')).toHaveCount(1);await page.reload();await expect(left.locator('[data-widget-id="recommended-targets"]')).toHaveCount(1);
-    const migrated=await worker.evaluate(async()=>chrome.storage.local.get<{state:PublicState;bosbotDevice?:unknown}>(['state','bosbotDevice']));expect(migrated.state.settings.dataSource).toBe('torn');expect(migrated.state.layouts.CUSTOM.right).toContain('restock');expect(migrated.bosbotDevice).toBeUndefined();
+    const migrated=await worker.evaluate(async()=>chrome.storage.local.get<{state:PublicState;bosbotDevice?:unknown}>(['state','bosbotDevice']));expect(migrated.state.settings.dataSource).toBe('torn');expect(migrated.state.layouts.CUSTOM.right).toContain('travel-favorites');expect(migrated.bosbotDevice).toBeUndefined();
     const options=await context.newPage();await options.goto(`chrome-extension://${id}/options.html`);await expect(options.getByLabel('Torn API key')).toHaveCount(1);await expect(options.getByText('BOSBOT connection',{exact:true})).toHaveCount(0);
     const{cdp,isolated}=await isolatedContext(context,page);
     for(const type of ['KEY_STATUS','SAVE_KEY','TEST_CONNECTION']){const denied=await cdp.send('Runtime.evaluate',{contextId:isolated,expression:`chrome.runtime.sendMessage({type:'${type}',${type==='SAVE_KEY'?`key:'${TEST_KEY}',remember:true`:''}})`,awaitPromise:true,returnByValue:true});expect(denied.result.value).toMatchObject({ok:false});}
     const denied=await cdp.send('Runtime.evaluate',{contextId:isolated,expression:"(async()=>{try{await chrome.storage.local.get('tornCredential');return false}catch{return true}})()",awaitPromise:true,returnByValue:true});expect(denied.result.value).toBe(true);
-    await host.getByLabel('Dashboard preset').selectOption('CUSTOM');await expect(host.getByLabel('Dashboard preset')).toHaveValue('CUSTOM');await expect(host.locator('[data-widget-id="restock"]')).toHaveCount(1);
+    await host.getByLabel('Dashboard preset').selectOption('CUSTOM');await expect(host.getByLabel('Dashboard preset')).toHaveValue('CUSTOM');await expect(host.locator('[data-widget-id="travel-favorites"]')).toHaveCount(1);
   }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });
 
@@ -116,18 +145,18 @@ test('personal API and YATA power only Dubai travel products, grouped watches an
     const state=defaultState();state.settings.stockProvider='yata';state.settings.travelCapacityOverride=29;state.favorites=[{itemId:3,name:'Xanax',country:'Switzerland',minimumStock:1,alert:true}];
     await worker.evaluate(async data=>{await chrome.storage.local.set(data);},{state,personalApiV4:true});
     const options=await context.newPage();await options.goto(`chrome-extension://${id}/options.html`);await options.getByLabel('Torn API key').fill(TEST_KEY);await options.getByRole('button',{name:'Connect Torn API',exact:true}).click();await expect(options.locator('#key-status')).toContainText('#55');
-    const page=await context.newPage();await page.goto('https://www.torn.com/page.php?sid=travel');const host=page.locator('#tcd-dashboard'),dock=page.locator('#tcd-travel-dock');
+    const page=await context.newPage();await page.goto('https://www.torn.com/page.php?sid=travel');const host=page.locator('#tcd-dashboard');
     await expect(host.locator('.source-badge')).toHaveText('TORN API');await expect(host.getByLabel('Dashboard preset')).toHaveValue('TRAVEL');await expect(host.locator('[data-widget-id="chain"]')).toHaveCount(0);
-    const market=dock.locator('[data-widget-id="travel-market"]');await expect(market).toContainText('UAE');await expect(market.locator('.market-product')).toHaveCount(2);await expect(market).not.toContainText('Xanax');await expect(market).not.toContainText('Monkey Plushie');
-    await expect(dock.locator('[data-widget-id="travel-profit"]')).toHaveCount(0);await expect(market).toContainText('29 · manual');await expect(page.locator('#travel-flight + #tcd-travel-dock')).toHaveCount(1);
-    await market.getByLabel('In stock only',{exact:true}).check();await expect(market.locator('.market-product')).toHaveCount(1);await market.getByLabel('In stock only',{exact:true}).uncheck();await market.getByLabel('Search products').fill('trib');await expect(market.locator('.market-product')).toHaveCount(1);await expect(market.getByLabel('Search products')).toHaveValue('trib');await expect(market.getByLabel('Search products')).toBeFocused();
-    await market.getByLabel('Search products').fill('');await market.getByLabel('Watch Camel Plushie in UAE',{exact:true}).click();await expect(host.locator('[data-widget-id="travel-favorites"]')).toContainText('UAE');await expect(host.locator('[data-widget-id="travel-favorites"]')).not.toContainText('Switzerland');
-    await options.reload();await expect(options.locator('#favorites .watch-country')).toHaveCount(2);await expect(options.locator('#favorites')).toContainText('Plushies');
+    await expect(page.locator('#tcd-travel-dock')).toHaveCount(0);await expect(host.locator('[data-widget-id="travel-status"]')).toHaveCount(0);await expect(host.locator('[data-widget-id="restock"]')).toHaveCount(0);
+    const watches=host.locator('[data-widget-id="travel-favorites"]');await expect(watches).toContainText('0 watched');await expect(watches.getByRole('button',{name:'+ Add',exact:true})).toBeVisible();await expect(watches).not.toContainText('Xanax');
+    await expect(options.locator('#product-list option[value="UAE:1"]')).toHaveCount(1);await options.locator('#product-list').selectOption('UAE:1');await options.getByRole('button',{name:'Add / update watched product',exact:true}).click();
+    await expect(watches).toContainText('Camel Plushie');await expect(watches).toContainText('50');await expect(watches).not.toContainText('Switzerland');await expect(watches).not.toContainText('Monkey Plushie');
+    await expect(host.locator('[data-widget-id="travel-profit"]')).toHaveCount(0);await expect(options.locator('#favorites .watch-country')).toHaveCount(2);await expect(options.locator('#favorites')).toContainText('Plushies');
     await options.getByRole('button',{name:'Test warning sound',exact:true}).click();await expect(options.locator('#status')).toContainText('Warning sound played');expect((await worker.evaluate(()=>chrome.runtime.getContexts({contextTypes:[chrome.runtime.ContextType.OFFSCREEN_DOCUMENT]}))).length).toBe(1);
     const second=await context.newPage();await second.goto('https://www.torn.com/page.php?sid=travel');await expect(second.locator('#tcd-dashboard .source-badge')).toHaveText('TORN API');expect((await calls.evaluate(()=> (globalThis as unknown as {fixtureCalls:string[]}).fixtureCalls)).filter(path=>path==='torn/items')).toHaveLength(1);
     const reply=await options.evaluate(async()=>chrome.runtime.sendMessage({type:'READ_STATE'}));expect(JSON.stringify(reply)).not.toContain(TEST_KEY);expect(await page.content()).not.toContain(TEST_KEY);
     await page.screenshot({path:resolve('docs/travel-preview.png'),fullPage:true});
-    await options.getByRole('button',{name:'Remove API key',exact:true}).click();await expect(options.locator('#key-status')).toContainText('No personal API key');await expect(host.locator('.source-badge')).toHaveText('NO DATA');await expect(dock).toBeHidden();
+    await options.getByRole('button',{name:'Remove API key',exact:true}).click();await expect(options.locator('#key-status')).toContainText('No personal API key');await expect(host.locator('.source-badge')).toHaveText('NO DATA');await expect(page.locator('#tcd-travel-dock')).toHaveCount(0);
   }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });
 
@@ -139,7 +168,7 @@ test('WAR has only chain and live opponent recommendations, with an actual 30 se
     const page=await context.newPage();await page.goto('https://www.torn.com/index.php');const host=page.locator('#tcd-dashboard');await expect(host.getByLabel('Dashboard preset')).toHaveValue('WAR');await expect(host.locator('.widget-card')).toHaveCount(2);await expect(host.locator('[data-widget-id="recommended-targets"]')).toContainText('Actual opponent');await expect(host.locator('[data-widget-id="recommended-targets"]')).toContainText('Opponent A');await expect(host.locator('[data-widget-id="recommended-targets"]')).toContainText('Stats: unknown');await expect(host.locator('[data-widget-id="chain"] .chain-warning')).toBeVisible();
     await expect.poll(async()=>{const stored=await worker.evaluate(async()=>chrome.storage.local.get<{alertDelivery?:{failed:boolean}}>('alertDelivery'));return stored.alertDelivery?.failed;}).toBe(false);await expect.poll(async()=>{const stored=await worker.evaluate(async()=>chrome.storage.local.get<{alertState?:{memory:{seen:string[]}}}>('alertState'));return stored.alertState?.memory.seen.filter((key:string)=>key.startsWith('chain:')).length;}).toBe(1);
     await page.screenshot({path:resolve('docs/war-preview.png'),fullPage:true});
-    await host.getByLabel('Dashboard preset').selectOption('TRAVEL');await expect(host.locator('[data-widget-id="restock"]')).toContainText('Waiting for market context');await expect(host.locator('[data-widget-id="restock"]')).not.toContainText('Xanax');
+    await host.getByLabel('Dashboard preset').selectOption('TRAVEL');await expect(host.locator('[data-widget-id="travel-favorites"]')).toContainText('0 watched');await expect(host.locator('[data-widget-id="travel-favorites"]')).not.toContainText('Xanax');
   }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });
 

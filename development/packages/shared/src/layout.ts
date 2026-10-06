@@ -1,15 +1,18 @@
 import { FavoriteSchema, LayoutSchema, SettingsSchema } from './contracts';
 import type { Layout, Mode, PublicState, WidgetId } from './contracts';
-import { DEFAULT_FAVORITES, DEFAULT_SETTINGS, WIDGET_IDS } from './defaults';
+import { DEFAULT_FAVORITES, DEFAULT_SETTINGS, WIDGET_IDS, RETIRED_WIDGET_IDS } from './defaults';
 
 export const PRESETS: Record<Mode, Layout> = {
-  NORMAL: { left: ['chain'], right: ['travel-favorites', 'restock', 'company-addiction'] },
-  TRAVEL: { left: ['travel-status'], right: ['travel-favorites', 'restock'] },
+  NORMAL: { left: ['chain'], right: ['travel-favorites', 'company-addiction'] },
+  TRAVEL: { left: ['travel-profit'], right: ['travel-favorites'] },
   WAR: { left: ['chain'], right: ['recommended-targets'] },
-  CUSTOM: { left: ['war-status', 'chain', 'recommended-targets', 'hospital-timers'], right: ['travel-status', 'travel-favorites', 'restock', 'travel-market', 'travel-profit', 'company-addiction'] }
+  CUSTOM: { left: ['war-status', 'chain', 'recommended-targets', 'hospital-timers'], right: ['travel-favorites', 'travel-profit', 'company-addiction'] }
 };
 /** Built-in presets have fixed membership; CUSTOM retains arbitrary widget choices. */
 export function presetLayout(layout: Layout, mode: Mode): Layout {
+  const hasWatch = [...layout.left,...layout.right].includes('travel-favorites');
+  const compact = (ids: WidgetId[]) => ids.flatMap(id => id === 'restock' ? hasWatch ? [] : ['travel-favorites' as const] : id === 'travel-market' || id === 'travel-status' ? [] : [id]);
+  layout = {left:compact(layout.left),right:compact(layout.right)};
   const allowed = new Set([...PRESETS[mode].left, ...PRESETS[mode].right]);
   return reconcileLayout({ left: layout.left.filter(id => allowed.has(id)), right: layout.right.filter(id => allowed.has(id)) }, PRESETS[mode]);
 }
@@ -20,7 +23,7 @@ export function migrateState(raw: unknown): PublicState {
   const value = raw as Partial<PublicState>;
   const settings = SettingsSchema.safeParse({ ...initial.settings, ...value.settings, dataSource: 'torn' });
   const favorites = FavoriteSchema.array().max(50).safeParse(value.favorites);
-  if (settings.success) initial.settings = settings.data;
+  if (settings.success) { initial.settings = settings.data; initial.settings.disabledWidgets = initial.settings.disabledWidgets.filter(id => !RETIRED_WIDGET_IDS.some(retired => retired === id)); }
   if (favorites.success) initial.favorites = favorites.data;
   for (const mode of ['NORMAL', 'TRAVEL', 'WAR', 'CUSTOM'] as const) {
     const parsed = LayoutSchema.safeParse(value.layouts?.[mode]);

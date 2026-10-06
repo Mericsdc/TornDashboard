@@ -1,7 +1,7 @@
-import { FavoriteSchema, SettingsSchema, WIDGET_IDS, category, freshStock, type PublicState, type Snapshot, type StockItem, historyTotals } from '@tcd/shared';
+import { FavoriteSchema, SettingsSchema, ACTIVE_WIDGET_IDS, category, freshStock, type PublicState, type Snapshot, type StockItem, historyTotals } from '@tcd/shared';
 import { send } from '../services/protocol';
 import { button, el, time, stat } from '../core/dom';
-import { money } from '../widgets/travel-market';
+import { money } from '../core/format';
 import { profitNodes, signedMoney } from '../widgets/travel-profit';
 import { requestTornAccess } from '../services/torn-connection';
 let state: PublicState, stocks: StockItem[] = [];
@@ -27,13 +27,13 @@ function render(): void {
   for (const [name,value] of Object.entries({ chainAlert: state.settings.alerts.chain, stockAlert: state.settings.alerts.stock, soundAlert: state.settings.alerts.sound, restockReminder: state.settings.alerts.restockReminder, yata: state.settings.stockProvider === 'yata' })) (field(name) as HTMLInputElement).checked = value;
   field('travelCapacityOverride').value = state.settings.travelCapacityOverride === null ? '' : String(state.settings.travelCapacityOverride);
   const widgets = document.querySelector<HTMLElement>('#widget-settings')!; widgets.replaceChildren();
-  for (const id of WIDGET_IDS) { const label = el('label'), input = el('input'); input.type = 'checkbox'; input.name = `widget-${id}`; input.checked = !state.settings.disabledWidgets.includes(id); label.append(input, el('span','', id.replaceAll('-',' '))); widgets.append(label); }
+  for (const id of ACTIVE_WIDGET_IDS) { const label = el('label'), input = el('input'); input.type = 'checkbox'; input.name = `widget-${id}`; input.checked = !state.settings.disabledWidgets.includes(id); label.append(input, el('span','', id.replaceAll('-',' '))); widgets.append(label); }
   renderFavorites();
 }
 function renderFavorites(): void {
   const container = document.querySelector<HTMLElement>('#favorites')!; container.replaceChildren();
   const countries = [...new Set(state.favorites.map(f => f.country))].sort();
-  if (!countries.length) container.append(el('p','muted','No watched products yet. Add one below or tap a star in Travel Market.'));
+  if (!countries.length) container.append(el('p','muted','No watched products yet. Add a country and product below.'));
   for (const country of countries) {
     const group = el('details', 'watch-country'); group.open = true;
     const favorites = state.favorites.filter(f => f.country === country); group.append(el('summary','', `${country} · ${favorites.length} watched`));
@@ -73,7 +73,7 @@ form.addEventListener('submit',event=>{ event.preventDefault(); handle((async()=
   if(stockProvider==='yata'&&!await chrome.permissions.request({origins:['https://yata.yt/*']}))throw new Error('YATA access was not granted');
   const nullable=(name:string)=>field(name).value.trim()===''?null:Number(field(name).value);
   // Send only fields edited here. An older Options tab must not overwrite appearance saved on Torn.
-  const patch=SettingsSchema.pick({stockProvider:true,travelCapacityOverride:true,alerts:true,disabledWidgets:true}).parse({stockProvider,travelCapacityOverride:nullable('travelCapacityOverride'),alerts:{chain:checked('chainAlert'),stock:checked('stockAlert'),sound:checked('soundAlert'),restockReminder:checked('restockReminder')},disabledWidgets:WIDGET_IDS.filter(id=>!checked(`widget-${id}`))});
+  const patch=SettingsSchema.pick({stockProvider:true,travelCapacityOverride:true,alerts:true,disabledWidgets:true}).parse({stockProvider,travelCapacityOverride:nullable('travelCapacityOverride'),alerts:{chain:checked('chainAlert'),stock:checked('stockAlert'),sound:checked('soundAlert'),restockReminder:checked('restockReminder')},disabledWidgets:ACTIVE_WIDGET_IDS.filter(id=>!checked(`widget-${id}`))});
   state=await send<PublicState>({type:'SAVE_SETTINGS',patch});render();report('Settings saved. Torn tabs update automatically.');handle(products());
 })());});
 document.querySelector<HTMLFormElement>('#key-form')!.addEventListener('submit',event=>{event.preventDefault();const target=event.currentTarget as HTMLFormElement,key=field('tornKey',target).value.trim(),remember=(field('rememberKey',target) as HTMLInputElement).checked;connectionAction('Connecting to Torn API…',async()=>{await send({type:'SAVE_KEY',key,remember});field('tornKey',target).value='';await keyStatus();await products();report('Connected. Personal data comes directly from Torn. Enable YATA and Save settings for stocks.');});});

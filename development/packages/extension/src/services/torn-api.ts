@@ -1,6 +1,6 @@
 /** Worker-only fixed endpoints. Keys are never included in snapshots or sent to stock providers. */
 import { z } from 'zod';
-import { canonicalCountry, estimateRestock, SnapshotSchema, type Snapshot, type StockItem, type StockObservation, type TravelApp, type TravelObservation, type InventorySnapshot, type Purchase, type ResourceBars } from '@tcd/shared';
+import { canonicalCountry, nextChainBonus, currentChain, estimateRestock, SnapshotSchema, type Snapshot, type StockItem, type StockObservation, type TravelApp, type TravelObservation, type InventorySnapshot, type Purchase, type ResourceBars } from '@tcd/shared';
 import { requestTorn, TornError } from './torn-connection';
 export { TornError } from './torn-connection';
 const num = z.number().finite(), id = num.int().positive(), sec = num.nonnegative().nullable();
@@ -8,7 +8,7 @@ const Status = z.object({ state: z.string(), description: z.string().default('')
 const Profile = z.object({ profile: z.object({ id, name: z.string(), level: id, status: Status }) });
 const Info = z.object({ info: z.object({ user: z.object({ id, faction_id: id.nullable(), company_id: id.nullable() }), access: z.object({ level: num, type: z.string(), log: z.object({ custom_permissions: z.boolean(), available: z.array(z.object({ category_id: id, log_ids: z.array(id) })) }).optional() }), selections: z.record(z.string(), z.array(z.string())).optional() }) });
 const Travel = z.object({ travel: z.object({ destination: z.string(), departed_at: sec, arrival_at: sec, time_left: num.nonnegative(), method: z.string().nullable().optional() }) });
-const Chain = z.object({ chain: z.object({ id: num.int(), current: num.nonnegative(), max: num.nonnegative(), timeout: num.nonnegative(), start: num, end: num }) });
+const Chain = z.object({ chain: z.object({ id: num.int(), current: num.nonnegative(), max: num.nonnegative(), timeout: num.nonnegative(), start: num, end: num, cooldown: num.optional() }) });
 const Wars = z.object({ wars: z.object({ ranked: z.object({ war_id: id, start: num, end: sec, target: num, winner: id.nullable(), factions: z.array(z.object({ id, name: z.string(), score: num })).max(2) }).nullable() }) });
 const Members = z.object({ members: z.array(z.object({ id, name: z.string(), level: id, status: Status, last_action: z.object({ status: z.string() }) })).max(200) });
 const Items = z.object({ items: z.array(z.object({ id, name: z.string(), type: z.string().optional(), value: z.object({ market_price: num.nonnegative(), shops: z.array(z.object({ country: z.string(), buy_price: sec })).max(50) }) })).max(10000) });
@@ -72,7 +72,9 @@ export class TornApi {
       throw new TornError(code === 16 ? 'This API key does not allow this selection. Use a Minimal key or the required custom permissions.' : `Torn API error ${code}.`);
     }
     const parsed = schema.safeParse(raw); if (!parsed.success) throw new TornError('Torn response has an unsupported format.');
-    this.cache.set(path, { at: now, value: parsed.data }); return { value: parsed.data, at: now };
+    const age = path === 'faction/chain' ? Math.max(0, Math.min(3600, Number(response.headers.get('age')) || 0)) * 1000 : 0;
+    const at = now - age;
+    this.cache.set(path, { at, value: parsed.data }); return { value: parsed.data, at };
   }
   async connect(): Promise<KeyInfo> { this.info = (await this.get('key/info', Info, 300000)).value.info; return this.info; }
   async snapshot(stockProvider: 'off' | 'yata', history: Record<string, StockObservation[]>, hint?: RouteHint): Promise<Snapshot> {
@@ -96,7 +98,7 @@ export class TornApi {
     }
     if (info.user.faction_id) {
       const war = await safe('war', () => this.get('faction/wars', Wars, 60000)), chain = await safe('chain', () => this.get('faction/chain', Chain, 15000));
-      if (chain) { const c = chain.value.chain; s.chain = { id: c.id > 0 ? c.id : null, count: c.current, goal: [10,25,50,100,250,500,1000,2500,5000,10000,25000,50000,100000].find(n => n > c.current) || Math.max(c.current,1), expiresAt: c.current > 0 && c.timeout > 0 ? chain.at + c.timeout * 1000 : null, startedAt: c.start ? c.start * 1000 : null, observedAt: chain.at }; }
+      if (chain) { const c = chain.value.chain; s.chain = currentChain({ id: c.id > 0 ? c.id : null, count: c.current, goal: nextChainBonus(c.current), expiresAt: c.current > 0 && c.timeout > 0 && !c.end ? chain.at + c.timeout * 1000 : null, startedAt: c.start ? c.start * 1000 : null, observedAt: chain.at, source: 'api', status: c.current > 0 && c.timeout > 0 && !c.end ? 'active' : c.current > 0 ? 'ended' : c.cooldown && c.cooldown * 1000 > now ? 'cooldown' : 'inactive' }, now); }
       const ranked = war?.value.wars.ranked;
       if (ranked && war) {
         const enemy = ranked.factions.find(f => f.id !== info.user.faction_id), own = ranked.factions.find(f => f.id === info.user.faction_id);

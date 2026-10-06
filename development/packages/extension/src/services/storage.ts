@@ -1,4 +1,6 @@
 import type { Favorite, Layout, Mode, PublicState, Settings, Snapshot } from '@tcd/shared';
+import { pageChain } from '@tcd/shared';
+import { ChainPageObserver } from './chain-page-observer';
 import { TravelPageObserver } from './travel-page-observer';
 import { send } from './protocol';
 
@@ -8,11 +10,16 @@ export interface DashboardStore {
   layout(mode: Mode, layout: Layout): Promise<PublicState>;
   favorites(favorites: Favorite[]): Promise<PublicState>;
   snapshot(): Promise<Snapshot>;
+  nativeChain?(chain: Snapshot['chain'], now: number): Snapshot['chain'];
   checkAlerts?(): Promise<void>;
   openOptions(): Promise<void>;
   subscribe(listener: (refreshData?: boolean, clearAccount?: boolean) => void): () => void;
 }
 export class ExtensionStore implements DashboardStore {
+  private chainPage = new ChainPageObserver(observation => { void send({type:'CHAIN_OBSERVATION',observation}).catch(() => undefined); });
+  nativeChain = (chain: Snapshot['chain'], now: number): Snapshot['chain'] => {
+    const observation=this.chainPage.current(now);return observation ? pageChain(chain,observation,now) ?? chain : chain;
+  };
   private page = new TravelPageObserver(observation => { void send({ type: 'TRAVEL_OBSERVATION', observation }).catch(() => undefined); });
   load = () => send<PublicState>({ type: 'READ_STATE' });
   settings = (patch: Partial<Settings>) => send<PublicState>({ type: 'SAVE_SETTINGS', patch });
@@ -26,6 +33,6 @@ export class ExtensionStore implements DashboardStore {
       if (typeof message === 'object' && message !== null && 'type' in message && ['STATE_CHANGED', 'DATA_CHANGED', 'ACCOUNT_CHANGED'].includes(String(message.type))) listener(message.type !== 'STATE_CHANGED', message.type === 'ACCOUNT_CHANGED');
     };
     chrome.runtime.onMessage.addListener(handler);
-    return () => { chrome.runtime.onMessage.removeListener(handler); this.page.destroy(); };
+    return () => { chrome.runtime.onMessage.removeListener(handler); this.page.destroy(); this.chainPage.destroy(); };
   }
 }

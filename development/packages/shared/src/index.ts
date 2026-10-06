@@ -6,5 +6,6 @@ export * from './scoring';
 export * from './restock';
 export * from './travel';
 export * from './alerts';
+export * from './chain';
 export * from './trip-model';
 export * from './trip-engine';

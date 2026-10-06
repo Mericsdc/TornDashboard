@@ -1,4 +1,6 @@
-# Travel refactor — TornDashboard 0.5.0
+# Travel engine refactor — original 0.5.0 implementation
+
+**Current UI (0.5.1):** TravelDock, Travel Market, Travel Status and the separate Restock card below have been retired. The persistent engine described here is retained. Use [the compact Travel report](COMPACT-TRAVEL.md) for current files, UI and acceptance checks.
 
 ## Architecture and root cause
 

@@ -16,7 +16,7 @@ export async function requestTorn(path: string, key: string | undefined, request
   for (let attempt = 0; attempt < 2; attempt++) {
     const signal = AbortSignal.timeout(10000);
     try {
-      const response = await request(`https://api.torn.com/v2/${path}`, { headers: key ? { Authorization: `ApiKey ${key}` } : {}, credentials: 'omit', redirect: 'error', signal });
+      const response = await request(`https://api.torn.com/v2/${path}`, { headers: key ? { Authorization: `ApiKey ${key}` } : {}, credentials: 'omit', redirect: 'error', ...(path.startsWith('faction/chain') ? {cache:'no-store' as const} : {}), signal });
       // Reading the body shares the same deadline; a dropped stream is also a transport failure.
       const text = response.ok ? await response.text() : '';
       if (text.length > 8 * 1024 * 1024) throw new TornError('Torn response exceeded the size limit.');
