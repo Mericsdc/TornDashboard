@@ -4,6 +4,7 @@ import type { Reply } from '../services/protocol';
 import { processAlerts, playWarning } from './alerts';
 import { senderRole } from './access';
 import { TornApi, type RouteHint } from '../services/torn-api';
+import { requireTornAccess, testTornConnection, TORN_API_PERMISSION } from '../services/torn-connection';
 const ready = Promise.all([chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }), chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })]);
 let queue: Promise<unknown> = ready, api: TornApi | undefined, cached: Snapshot | undefined, hint: RouteHint | undefined;
 let cachedOwner: number | undefined;
@@ -27,6 +28,7 @@ async function broadcast(type: string): Promise<void> {
 async function writeState(state: PublicState): Promise<PublicState> { const value = StateSchema.parse(state); await chrome.storage.local.set({ state: value }); await broadcast('STATE_CHANGED'); return value; }
 async function snapshot(state: PublicState): Promise<Snapshot> {
   const auth = await credential(); if (!auth) throw new Error('Add your personal Torn API key in Options');
+  await requireTornAccess();
   api ||= new TornApi(auth.key);
   const store = await chrome.storage.local.get<{ stockHistory?: Record<string, StockObservation[]> }>('stockHistory');
   const history = store.stockHistory || {}, before = JSON.stringify(history);
@@ -49,7 +51,7 @@ async function handle(raw: unknown, sender: chrome.runtime.MessageSender): Promi
   const role = senderRole(sender, chrome.runtime.id); if (!role) throw new Error('Sender is not authorized');
   const parsed = MessageSchema.safeParse(raw); if (!parsed.success) throw new Error('Invalid request');
   const message = parsed.data;
-  if (['SAVE_KEY','KEY_STATUS','DISCONNECT_KEY','REFRESH_DATA','TEST_SOUND','RESET_STATE'].includes(message.type) && role !== 'options') throw new Error('Open extension options for this action');
+  if (['SAVE_KEY','KEY_STATUS','DISCONNECT_KEY','REFRESH_DATA','TEST_CONNECTION','TEST_SOUND','RESET_STATE'].includes(message.type) && role !== 'options') throw new Error('Open extension options for this action');
   const state = await readState();
   switch (message.type) {
     case 'READ_STATE': return state;
@@ -58,6 +60,7 @@ async function handle(raw: unknown, sender: chrome.runtime.MessageSender): Promi
     case 'CHECK_ALERTS': { const auth = await credential(); if (cached && auth && cachedOwner === auth.userId) await processAlerts(cached, state, `torn/${auth.userId}`); return null; }
     case 'SAVE_KEY': {
       if (!('key' in message && 'remember' in message)) throw new Error('Invalid key request');
+      await requireTornAccess();
       const next = new TornApi(message.key), info = await next.connect();
       cached = undefined; cachedOwner = undefined;
       await chrome.storage.local.remove(['tornCredential','alertState']); await chrome.storage.session.remove('tornCredential');
@@ -65,7 +68,8 @@ async function handle(raw: unknown, sender: chrome.runtime.MessageSender): Promi
       await (message.remember ? chrome.storage.local : chrome.storage.session).set({ tornCredential: value });
       api = next; cached = undefined; hint = undefined; await broadcast('DATA_CHANGED'); return { connected: true, userId: info.user.id, access: info.access.type };
     }
-    case 'KEY_STATUS': { const auth = await credential(); return { connected: Boolean(auth), userId: auth?.userId, remember: auth?.remember, access: api?.info?.access.type }; }
+    case 'KEY_STATUS': { const auth = await credential(); return { connected: Boolean(auth), userId: auth?.userId, remember: auth?.remember, access: api?.info?.access.type, hasApiAccess: await chrome.permissions.contains({ origins: [TORN_API_PERMISSION] }) }; }
+    case 'TEST_CONNECTION': await requireTornAccess(); await testTornConnection(); return null;
     case 'DISCONNECT_KEY': cached = undefined; cachedOwner = undefined; await chrome.storage.local.remove(['tornCredential','alertState']); await chrome.storage.session.remove('tornCredential'); api = undefined; cached = undefined; hint = undefined; await chrome.alarms.clear('chain-warning'); await broadcast('DATA_CHANGED'); return null;
     case 'REFRESH_DATA': { const data = await snapshot(state); await broadcast('DATA_CHANGED'); return data; } // Respects shared endpoint caches.
     case 'OPEN_OPTIONS': await chrome.runtime.openOptionsPage(); return null;

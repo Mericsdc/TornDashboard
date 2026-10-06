@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { TornApi, joinStocks } from '../../packages/extension/src/services/torn-api';
+import { requireTornAccess, requestTornAccess, testTornConnection } from '../../packages/extension/src/services/torn-connection';
 import { canonicalCountry, defaultState, marketRows, migrateState, optimizeBag, presetLayout, travelCountry, type StockItem } from '@tcd/shared';
 const now=1800000000000;
 const item=(patch:Partial<StockItem>={}):StockItem=>({itemId:1,name:'Camel Plushie',country:'UAE',cost:10,tornValue:30,priceObservedAt:now,stock:20,observedAt:now,restock:{kind:'unknown',reason:'No history'},...patch});
@@ -44,6 +45,38 @@ describe('direct Torn API adapter',()=>{
   it('backs off rate limits across endpoint reads',async()=>{
     const request=network({'key/info':{error:{code:5}}}),api=new TornApi('TESTONLYKEY12345',request,()=>now);
     await expect(api.connect()).rejects.toThrow('Torn API error 5');await expect(api.connect()).rejects.toThrow('Waiting');expect(request).toHaveBeenCalledTimes(1);
+  });
+  it('recovers a transient Chrome fetch failure without moving the key into a URL',async()=>{
+    const request=network();request.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    expect((await new TornApi('TESTONLYKEY12345',request,()=>now).connect()).user.id).toBe(55);expect(request).toHaveBeenCalledTimes(2);
+    for(const[url,options]of request.mock.calls){expect(String(url)).toBe('https://api.torn.com/v2/key/info');expect(options?.credentials).toBe('omit');expect(options?.redirect).toBe('error');expect(new Headers(options?.headers).get('authorization')).toBe('ApiKey TESTONLYKEY12345');}
+  });
+  it('recovers a dropped response stream within the same bounded read policy',async()=>{
+    const request=network();request.mockResolvedValueOnce(new Response(new ReadableStream({start(controller){controller.error(new TypeError('PRIVATE_PROVIDER_DETAIL'));}})));
+    expect((await new TornApi('TESTONLYKEY12345',request,()=>now).connect()).user.id).toBe(55);expect(request).toHaveBeenCalledTimes(2);
+  });
+  it('reports timeout and offline failures separately without leaking transport details',async()=>{
+    const timeout=vi.fn<typeof fetch>().mockRejectedValue(new DOMException('PRIVATE_PROVIDER_DETAIL','TimeoutError'));
+    await expect(new TornApi('TESTONLYKEY12345',timeout,()=>now).connect()).rejects.toThrow('timed out after two attempts');expect(timeout).toHaveBeenCalledTimes(2);
+    vi.stubGlobal('navigator',{onLine:false});
+    try{const offline=vi.fn<typeof fetch>().mockRejectedValue(new TypeError('PRIVATE_PROVIDER_DETAIL'));await expect(new TornApi('TESTONLYKEY12345',offline,()=>now).connect()).rejects.toThrow('Chrome is offline');expect(offline).toHaveBeenCalledTimes(1);}finally{vi.unstubAllGlobals();}
+  });
+  it('bounds repeated network failures and backs off all reads after the attempts',async()=>{
+    const request=vi.fn<typeof fetch>().mockRejectedValue(new TypeError('SECRET_KEY_IN_NETWORK_ERROR')),api=new TornApi('TESTONLYKEY12345',request,()=>now);
+    await expect(api.connect()).rejects.toThrow('Chrome could not reach api.torn.com');await expect(api.connect()).rejects.toThrow('Waiting');expect(request).toHaveBeenCalledTimes(2);
+  });
+  it('does not retry HTTP or API failures as network failures',async()=>{
+    const request=vi.fn<typeof fetch>().mockResolvedValue(new Response('private error details',{status:503}));
+    await expect(new TornApi('TESTONLYKEY12345',request,()=>now).connect()).rejects.toThrow('HTTP 503');expect(request).toHaveBeenCalledTimes(1);
+  });
+  it('checks reachability anonymously and rejects intercepted HTML',async()=>{
+    const request=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({error:{code:2}})));
+    await expect(testTornConnection(request)).resolves.toBeUndefined();const[url,options]=request.mock.calls[0]!;expect(String(url)).toBe('https://api.torn.com/v2/key/info');expect(new Headers(options?.headers).has('authorization')).toBe(false);expect(options?.credentials).toBe('omit');
+    request.mockResolvedValueOnce(new Response('<html>filter</html>'));await expect(testTornConnection(request)).rejects.toThrow('network filter');
+  });
+  it('blocks worker reads without API access and requests only the declared Torn origin',async()=>{
+    const contains=vi.fn().mockResolvedValue(false),request=vi.fn().mockResolvedValue(false);vi.stubGlobal('chrome',{permissions:{contains,request}});
+    try{await expect(requireTornAccess()).rejects.toThrow('Chrome has blocked');await expect(requestTornAccess()).rejects.toThrow('Chrome has blocked');expect(request).toHaveBeenCalledWith({origins:['https://api.torn.com/*']});contains.mockResolvedValue(true);await expect(requireTornAccess()).resolves.toBeUndefined();}finally{vi.unstubAllGlobals();}
   });
   it('returns unknown stock on stale, future, absent or wrong-country observations',()=>{
     for(const at of [now/1000-181,now/1000+31])expect(joinStocks([item()],{stocks:{uae:{update:at,stocks:[{id:1,quantity:15}]}}},now,{})[0]?.stock).toBeNull();

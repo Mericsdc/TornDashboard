@@ -1,6 +1,8 @@
 /** Worker-only fixed endpoints. Keys are never included in snapshots or sent to stock providers. */
 import { z } from 'zod';
 import { canonicalCountry, estimateRestock, SnapshotSchema, type Snapshot, type StockItem, type StockObservation } from '@tcd/shared';
+import { requestTorn, TornError } from './torn-connection';
+export { TornError } from './torn-connection';
 const num = z.number().finite(), id = num.int().positive(), sec = num.nonnegative().nullable();
 const Status = z.object({ state: z.string(), description: z.string().default(''), until: sec.optional() });
 const Profile = z.object({ profile: z.object({ id, name: z.string(), level: id, status: Status }) });
@@ -14,7 +16,6 @@ const Company = z.object({ profile: z.object({ name: z.string(), director: z.obj
 const Employees = z.object({ employees: z.array(z.object({ id, name: z.string(), effectiveness: z.object({ addiction: num }).optional() })).max(100) });
 const Yata = z.object({ stocks: z.record(z.string(), z.object({ update: num.int().nonnegative(), stocks: z.array(z.object({ id, quantity: num.int().min(0).max(10000000) })).max(300) })) });
 const CODES: Record<string, string> = { mex: 'Mexico', haw: 'Hawaii', sou: 'South Africa', jap: 'Japan', chi: 'China', arg: 'Argentina', swi: 'Switzerland', can: 'Canada', uni: 'United Kingdom', uae: 'UAE', cay: 'Cayman Islands' };
-export class TornError extends Error { constructor(message: string, readonly invalidKey = false) { super(message); } }
 export type RouteHint = { origin: string; destination: string; observedAt: number };
 export type KeyInfo = z.infer<typeof Info>['info'];
 export function joinStocks(catalog: StockItem[], raw: unknown, now: number, history: Record<string, StockObservation[]>): StockItem[] {
@@ -46,12 +47,11 @@ export class TornApi {
     if (this.disabled) throw new TornError('API key was rejected. Replace it in Options.', true);
     if (now < this.blockedUntil) throw new TornError('Torn rate limit or temporary error. Waiting before retrying.');
     if (cached && now - cached.at < ttl) return { value: schema.parse(cached.value), at: cached.at };
-    let response: Response;
-    try { response = await this.request(`https://api.torn.com/v2/${path}${path === 'faction/chain' ? `?timestamp=${Math.floor(now / 1000)}` : ''}`, { headers: { Authorization: `ApiKey ${this.key}` }, credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(15000) }); }
-    catch { throw new TornError('Torn API is unreachable. Check your connection.'); }
+    let result: Awaited<ReturnType<typeof requestTorn>>;
+    try { result = await requestTorn(`${path}${path === 'faction/chain' ? `?timestamp=${Math.floor(now / 1000)}` : ''}`, this.key, this.request); }
+    catch (error) { this.blockedUntil = this.clock() + 30000; throw error; }
+    const { response, text } = result;
     if (!response.ok) { this.blockedUntil = now + 60000; throw new TornError(`Torn API returned HTTP ${response.status}. Retrying later.`); }
-    const text = await response.text();
-    if (text.length > 8 * 1024 * 1024) throw new TornError('Torn response exceeded the size limit.');
     let raw: unknown; try { raw = JSON.parse(text); } catch { throw new TornError('Invalid Torn API response.'); }
     const failure = z.object({ error: z.object({ code: num }) }).safeParse(raw);
     if (failure.success) {

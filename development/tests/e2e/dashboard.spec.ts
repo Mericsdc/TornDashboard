@@ -20,6 +20,7 @@ async function mockTorn(context:BrowserContext,state:{travel:boolean;director?:b
       if(new Headers(options?.headers).has('authorization'))throw new Error('Key leaked to stock provider');
       return new Response(JSON.stringify({stocks:{uae:{update:now,stocks:[{id:1,quantity:50},{id:2,quantity:0},{id:3,quantity:1000}]},swi:{update:now,stocks:[{id:3,quantity:100}]},jap:{update:now,stocks:[{id:4,quantity:10}]}}}));
     }
+    if(url.hostname==='api.torn.com'&&url.pathname==='/v2/key/info'&&!new Headers(options?.headers).has('authorization')){testGlobal.fixtureCalls.push('anonymous-key/info');return new Response(JSON.stringify({error:{code:2}}));}
     if(url.hostname!=='api.torn.com'||new Headers(options?.headers).get('authorization')!=='ApiKey TESTONLYKEY12345')throw new Error('Unexpected API request');
     const path=url.pathname.replace('/v2/','');testGlobal.fixtureCalls.push(path);
     const payloads:Record<string,unknown>={
@@ -40,6 +41,29 @@ async function mockTorn(context:BrowserContext,state:{travel:boolean;director?:b
 }
 
 async function isolatedContext(context:BrowserContext,page:import('@playwright/test').Page){const cdp=await context.newCDPSession(page);let isolated=0;cdp.on('Runtime.executionContextCreated',event=>{if(event.context.auxData?.type==='isolated'&&!event.context.name.startsWith('__playwright'))isolated=event.context.id;});await cdp.send('Runtime.enable');await expect.poll(()=>isolated).toBeGreaterThan(0);return{cdp,isolated};}
+
+test('Chrome host access, connection retry and anonymous diagnosis protect key setup',async()=>{
+  const profile=await mkdtemp(join(tmpdir(),'torndashboard-connection-profile-')),context=await launch(profile);
+  try{
+    const worker=await mockTorn(context,{travel:false}),id=new URL(worker.url()).hostname,options=await context.newPage();await options.goto(`chrome-extension://${id}/options.html`);await expect(options.locator('#status')).toHaveText('Ready');
+    // Revoke actual Chrome host access in this disposable profile, rather than mocking contains().
+    const management=await context.newPage();await management.goto(`chrome://extensions/?id=${id}`);await expect(management.getByRole('heading',{name:'TornDashboard',level:1,exact:true})).toBeVisible();
+    const hostAccess=async(value:'ON_CLICK'|'ON_ALL_SITES')=>management.evaluate(async({id,value})=>{const browser=chrome as unknown as {developerPrivate:{updateExtensionConfiguration(config:{extensionId:string;hostAccess:string}):Promise<void>}};await browser.developerPrivate.updateExtensionConfiguration({extensionId:id,hostAccess:value});},{id,value});
+    await hostAccess('ON_CLICK');expect(await worker.evaluate(()=>chrome.permissions.contains({origins:['https://api.torn.com/*']}))).toBe(false);
+    for(const message of [{type:'TEST_CONNECTION'},{type:'SAVE_KEY',key:TEST_KEY,remember:true}])expect(await options.evaluate(message=>chrome.runtime.sendMessage(message),message)).toMatchObject({ok:false,error:expect.stringContaining('Chrome has blocked')});
+    expect(await worker.evaluate(()=>(globalThis as unknown as {fixtureCalls:string[]}).fixtureCalls)).toEqual([]);
+    // Native Chrome permission prompts need a human; exercise denial without opening that prompt in CI.
+    await options.evaluate(()=>{const testWindow=window as unknown as {originalRequest:typeof chrome.permissions.request;permissionCalls:chrome.permissions.Permissions[]};testWindow.originalRequest=chrome.permissions.request.bind(chrome.permissions);testWindow.permissionCalls=[];chrome.permissions.request=async permissions=>{testWindow.permissionCalls.push(permissions);return false;};});
+    await options.getByLabel('Torn API key').fill(TEST_KEY);await options.getByRole('button',{name:'Connect Torn API',exact:true}).click();await expect(options.locator('#status')).toContainText('Chrome has blocked');expect(await worker.evaluate(async()=>Boolean((await chrome.storage.local.get('tornCredential')).tornCredential))).toBe(false);
+    expect(await options.evaluate(()=>(window as unknown as {permissionCalls:chrome.permissions.Permissions[]}).permissionCalls)).toEqual([{origins:['https://api.torn.com/*']}]);
+    // Restore Chrome access, then use the real permissions API and inject one transport failure.
+    await hostAccess('ON_ALL_SITES');await options.evaluate(()=>{chrome.permissions.request=(window as unknown as {originalRequest:typeof chrome.permissions.request}).originalRequest;});
+    await worker.evaluate(()=>{const testGlobal=globalThis as unknown as {fetch:typeof fetch;connectAttempts:number},fixtureFetch=globalThis.fetch.bind(globalThis);testGlobal.connectAttempts=0;testGlobal.fetch=async(input,options)=>{if(String(input).endsWith('/key/info')&&new Headers(options?.headers).has('authorization')&&++testGlobal.connectAttempts===1)throw new TypeError('PRIVATE_NETWORK_DETAIL');return fixtureFetch(input,options);};});
+    await options.getByRole('button',{name:'Connect Torn API',exact:true}).click();await expect(options.locator('#key-status')).toContainText('#55');await expect(options.getByLabel('Torn API key')).toHaveValue('');expect(await worker.evaluate(()=>(globalThis as unknown as {connectAttempts:number}).connectAttempts)).toBe(2);
+    await options.getByRole('button',{name:'Test connection',exact:true}).click();await expect(options.locator('#status')).toContainText('No API key was sent');expect((await worker.evaluate(()=>(globalThis as unknown as {fixtureCalls:string[]}).fixtureCalls)).filter(path=>path==='anonymous-key/info')).toHaveLength(1);
+    await worker.evaluate(()=>{globalThis.fetch=async()=>{throw new TypeError('PRIVATE_KEY_OR_NETWORK_DETAIL');};});await options.getByLabel('Torn API key').fill('TESTONLYKEY54321');await options.getByRole('button',{name:'Connect Torn API',exact:true}).click();await expect(options.locator('#status')).toContainText('Chrome could not reach');await expect(options.locator('#status')).not.toContainText('PRIVATE');await expect(options.getByRole('button',{name:'Connect Torn API',exact:true})).toBeEnabled();expect(await worker.evaluate(async()=>(await chrome.storage.local.get<{tornCredential:{key:string}}>('tornCredential')).tornCredential.key)).toBe(TEST_KEY);
+  }finally{await context.close();await rm(profile,{recursive:true,force:true});}
+});
 
 test('responsive preview, explicit save, separated arrangement and SPA dock recovery',async({page})=>{
   await page.goto('/');const host=page.locator('#tcd-dashboard');await expect(host).toHaveAttribute('data-placement','gutters');await expect(host.locator('.widget-card')).toHaveCount(2);
@@ -79,7 +103,7 @@ test('legacy BOS state migrates, saves dragging and keeps personal credentials o
     const migrated=await worker.evaluate(async()=>chrome.storage.local.get<{state:PublicState;bosbotDevice?:unknown}>(['state','bosbotDevice']));expect(migrated.state.settings.dataSource).toBe('torn');expect(migrated.state.layouts.CUSTOM.right).toContain('restock');expect(migrated.bosbotDevice).toBeUndefined();
     const options=await context.newPage();await options.goto(`chrome-extension://${id}/options.html`);await expect(options.getByLabel('Torn API key')).toHaveCount(1);await expect(options.getByText('BOSBOT connection',{exact:true})).toHaveCount(0);
     const{cdp,isolated}=await isolatedContext(context,page);
-    for(const type of ['KEY_STATUS','SAVE_KEY']){const denied=await cdp.send('Runtime.evaluate',{contextId:isolated,expression:`chrome.runtime.sendMessage({type:'${type}',${type==='SAVE_KEY'?`key:'${TEST_KEY}',remember:true`:''}})`,awaitPromise:true,returnByValue:true});expect(denied.result.value).toMatchObject({ok:false});}
+    for(const type of ['KEY_STATUS','SAVE_KEY','TEST_CONNECTION']){const denied=await cdp.send('Runtime.evaluate',{contextId:isolated,expression:`chrome.runtime.sendMessage({type:'${type}',${type==='SAVE_KEY'?`key:'${TEST_KEY}',remember:true`:''}})`,awaitPromise:true,returnByValue:true});expect(denied.result.value).toMatchObject({ok:false});}
     const denied=await cdp.send('Runtime.evaluate',{contextId:isolated,expression:"(async()=>{try{await chrome.storage.local.get('tornCredential');return false}catch{return true}})()",awaitPromise:true,returnByValue:true});expect(denied.result.value).toBe(true);
     await host.getByLabel('Dashboard preset').selectOption('CUSTOM');await expect(host.getByLabel('Dashboard preset')).toHaveValue('CUSTOM');await expect(host.locator('[data-widget-id="restock"]')).toHaveCount(1);
   }finally{await context.close();await rm(profile,{recursive:true,force:true});}
@@ -127,7 +151,11 @@ test('company addiction is director-only, while CUSTOM retains arbitrary widget 
     const state=defaultState();state.settings.mode='CUSTOM';state.settings.autoSwitching=false;
     await worker.evaluate(async data=>chrome.storage.local.set(data),{state,personalApiV4:true});const options=await context.newPage();await options.goto(`chrome-extension://${id}/options.html`);await options.getByLabel('Torn API key').fill(TEST_KEY);await options.getByRole('button',{name:'Connect Torn API',exact:true}).click();await expect(options.locator('#key-status')).toContainText('#55');
     const page=await context.newPage();await page.goto('https://www.torn.com/index.php');const host=page.locator('#tcd-dashboard');await expect(host.getByLabel('Dashboard preset')).toHaveValue('CUSTOM');await expect(host.locator('[data-widget-id="company-addiction"]')).toContainText('Employee A');await expect(host.locator('[data-widget-id="company-addiction"]')).toContainText('-8');await expect(host.locator('[data-widget-id="travel-profit"]')).toHaveCount(0);
-    await options.getByLabel('Panel width',{exact:true}).fill('340');await options.getByLabel('Density',{exact:true}).selectOption('comfortable');await options.getByRole('button',{name:'Save settings',exact:true}).click();await expect(options.locator('#status')).toContainText('Settings saved');await expect(host.locator('.dashboard')).toHaveAttribute('data-density','comfortable');
+    await expect(options.getByRole('heading',{name:'Appearance',exact:true})).toHaveCount(0);await expect(options.getByLabel('Panel width',{exact:true})).toHaveCount(0);await expect(options.getByRole('button',{name:'Reset appearance & layouts',exact:true})).toHaveCount(0);
+    // Keep Options open while appearance changes on Torn, then save only Options-owned settings.
+    await host.getByLabel('Panel settings').click();await host.getByLabel('Width',{exact:true}).fill('340');await host.getByLabel('density',{exact:true}).selectOption('comfortable');await host.getByLabel('theme',{exact:true}).selectOption('slate');await host.getByRole('button',{name:'Save settings',exact:true}).click();await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
+    await options.getByLabel('Selling fee %',{exact:true}).fill('2');await options.getByRole('button',{name:'Save settings',exact:true}).click();await expect(options.locator('#status')).toContainText('Settings saved');await expect(host.locator('.dashboard')).toHaveAttribute('data-density','comfortable');await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
+    const saved=await options.evaluate(async()=>chrome.runtime.sendMessage({type:'READ_STATE'}));expect(saved.data.settings.panelWidth).toBe(340);expect(saved.data.settings.bag.feePercent).toBe(2);await page.reload();await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
     await host.getByLabel('Dashboard preset').selectOption('WAR');await expect(host.locator('.widget-card')).toHaveCount(2);await expect(host.locator('[data-widget-id="company-addiction"]')).toHaveCount(0);
   }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });

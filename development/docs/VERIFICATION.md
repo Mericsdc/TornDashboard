@@ -1,6 +1,6 @@
-# Verification — TornDashboard 0.4.0
+# Verification — TornDashboard 0.4.1
 
-2026-10-06. Node 24, ESLint, strict TypeScript, domain/API/backend/distribution tests and real unpacked MV3 Chromium flows are exercised. **42 unit/API/backend/distribution tests pass; all six Chromium flows pass.** Lint, typecheck and the 0.4.0 build also pass.
+2026-10-06. Node 24, ESLint, strict TypeScript, domain/API/backend/distribution tests and real unpacked MV3 Chromium flows are exercised. **49 unit/API/backend/distribution tests pass; all seven Chromium flows pass.** Lint, typecheck and the 0.4.1 build also pass.
 
 Browser flows cover:
 
@@ -9,9 +9,12 @@ Browser flows cover:
 3. Legacy BOS state migrates to direct personal API, preserves extra widgets in CUSTOM, drag/reload persists, old device tokens are removed, and content scripts cannot inspect private storage or submit keys.
 4. Dubai→Torn uses UAE only. Wrong-country YATA observations cannot override Torn's country catalog. Filters retain keyboard focus, watches group by country/type, the travel-only dock is inside the flight content, bag inputs/optimization persist, key removal clears data, and prices are cached across tabs.
 5. WAR contains only chain/recommendations. The actual opponent roster is loaded from the API-shaped fixture; battle stats stay unknown. Actual Chrome offscreen WAV playback and notification API delivery succeed at 30 seconds and deduplicate.
-6. Director company effects are visible only with a verified owner profile; CUSTOM retains arbitrary selection, options Save applies density/width, and WAR removes company widgets.
+6. Director company effects are visible only with a verified owner profile; CUSTOM retains arbitrary selection, and WAR removes company widgets. Options has no Appearance section or appearance reset button. A previously opened Options tab can save bag preferences without overwriting width/density/theme newly saved on Torn; those preferences survive reload.
+7. Actual Chrome host access is withheld in a disposable profile through Chrome's extensions-management API. The worker rejects API reads/key setup without network requests. A denied permission request stores no key. After access is restored, the real permissions API and Connect flow recover one simulated transport failure. The anonymous diagnostic sends no key. Failed replacement of a connected key preserves the previous credential and re-enables controls. Native permission-dialog acceptance requires a person; CI simulates denial and restores the host grant through Chrome management.
 
-External API transport is replaced with controlled fixtures inside the real worker. No production key, Torn login or personal bot data is used. Unit tests separately exercise the fixed request URLs/headers, schemas, invalid-key suppression, rate-limit backoff, profile ownership, stale/future stock, anonymous YATA join and director authorization. The public YATA export was fetched successfully during implementation. Official Torn OpenAPI 6.13.6 was consulted on this date.
+Automated external API transport uses controlled fixtures inside the real worker. No production key, Torn login or personal bot data is used. Unit tests separately exercise the fixed request URLs/headers, schemas, invalid-key suppression, rate-limit backoff, profile ownership, stale/future stock, anonymous YATA join and director authorization, plus stream failures, bounded retries, timeout/offline distinction and sanitized failures.
+
+An additional live transport check used native Chromium fetch in the loaded extension and the actual Options buttons, without replacing fetch: Test connection successfully reached the real Torn API; connecting the explicitly fake 16-character test key received Torn's incorrect-key response and stored no credential. Separate HTTPS GETs returned HTTP 200 with API error code 2. This proves API transport on this host, not authentication with the user's own key. The reported generic connection error did not reproduce with normal host access; the user's exact network/filter cause remains unconfirmed. The public YATA export was fetched successfully during 0.4.0 implementation. Official Torn OpenAPI 6.13.6 and Chrome permission documentation were consulted on this date.
 
 Packaging is verified using a fixed 11-asset allowlist, deterministic ZIP construction and independent unzip checksum/manifest inspection. Incomplete build staging is rejected before installed assets change. The canonical root directory remains unchanged. Temporary browser profiles are created outside the extension folder and removed.
 

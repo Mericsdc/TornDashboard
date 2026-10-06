@@ -2,6 +2,7 @@ import { FavoriteSchema, SettingsSchema, WIDGET_IDS, category, freshStock, type 
 import { send } from '../services/protocol';
 import { button, el, time } from '../core/dom';
 import { money } from '../widgets/travel-market';
+import { requestTornAccess } from '../services/torn-connection';
 let state: PublicState, stocks: StockItem[] = [];
 document.querySelector<HTMLElement>('#extension-version')!.textContent = `v${chrome.runtime.getManifest().version}`;
 const status = document.querySelector<HTMLElement>('#status')!, form = document.querySelector<HTMLFormElement>('#settings-form')!;
@@ -9,6 +10,13 @@ function field(name: string, target = form): HTMLInputElement | HTMLSelectElemen
 function checked(name: string) { return (field(name) as HTMLInputElement).checked; }
 function report(message: string, error = false): void { status.textContent = message; status.className = error ? 'error' : ''; }
 function handle(promise: Promise<unknown>): void { void promise.catch(error => report(error instanceof Error ? error.message : 'Operation failed', true)); }
+function connectionAction(message: string, action: () => Promise<void>): void {
+  report(message);
+  const buttons = document.querySelectorAll<HTMLButtonElement>('#key-form button'); buttons.forEach(button => { button.disabled = true; });
+  // Request in this click/submit gesture, before any asynchronous worker or storage call.
+  const permission = requestTornAccess();
+  handle((async () => { try { await permission; await action(); } finally { buttons.forEach(button => { button.disabled = false; }); } })());
+}
 function render(): void {
   for (const [name,value] of Object.entries(state.settings)) {
     const input = form.elements.namedItem(name);
@@ -55,23 +63,22 @@ async function products(): Promise<void> {
   renderFavorites();
 }
 async function keyStatus(): Promise<boolean> {
-  const result=await send<{connected:boolean;userId?:number;remember?:boolean;access?:string}>({type:'KEY_STATUS'});
-  document.querySelector('#key-status')!.textContent=result.connected?`Connected to your Torn account #${result.userId} · ${result.access || 'API'} · ${result.remember?'Remembered on this browser':'Until Chrome closes'}`:'No personal API key connected';
+  const result=await send<{connected:boolean;userId?:number;remember?:boolean;access?:string;hasApiAccess:boolean}>({type:'KEY_STATUS'});
+  document.querySelector('#key-status')!.textContent=result.connected?(result.hasApiAccess?`Connected to your Torn account #${result.userId} · ${result.access || 'API'} · ${result.remember?'Remembered on this browser':'Until Chrome closes'}`:`Key saved for account #${result.userId}. Chrome API access is blocked; click Test connection or Connect Torn API to restore it.`):'No personal API key connected';
   return result.connected;
 }
 form.addEventListener('submit',event=>{ event.preventDefault(); handle((async()=>{
   const stockProvider=checked('yata')?'yata':'off';
   if(stockProvider==='yata'&&!await chrome.permissions.request({origins:['https://yata.yt/*']}))throw new Error('YATA access was not granted');
   const nullable=(name:string)=>field(name).value.trim()===''?null:Number(field(name).value);
-  const patch=SettingsSchema.parse({...state.settings,panelWidth:Number(field('panelWidth').value),opacity:Number(field('opacity').value),gap:Number(field('gap').value),density:field('density').value,theme:field('theme').value,mode:field('mode').value,animation:checked('animation'),autoSwitching:checked('autoSwitching'),rememberPositions:checked('rememberPositions'),dataSource:'torn',stockProvider,bag:{capacity:nullable('capacity'),budget:nullable('budget'),roundTripMinutes:nullable('roundTripMinutes'),feePercent:Number(field('feePercent').value),favoritesOnly:checked('bagFavoritesOnly')},alerts:{chain:checked('chainAlert'),stock:checked('stockAlert'),sound:checked('soundAlert'),restockReminder:checked('restockReminder')},disabledWidgets:WIDGET_IDS.filter(id=>!checked(`widget-${id}`))});
-  // Connection origin is retained only for migrating old local preferences, never sent as a setting.
-  const { bosbotUrl: _legacy, ...publicPatch }=patch;void _legacy;
-  state=await send<PublicState>({type:'SAVE_SETTINGS',patch:publicPatch});render();report('Settings saved. Torn tabs update automatically.');handle(products());
+  // Send only fields edited here. An older Options tab must not overwrite appearance saved on Torn.
+  const patch=SettingsSchema.pick({stockProvider:true,bag:true,alerts:true,disabledWidgets:true}).parse({stockProvider,bag:{capacity:nullable('capacity'),budget:nullable('budget'),roundTripMinutes:nullable('roundTripMinutes'),feePercent:Number(field('feePercent').value),favoritesOnly:checked('bagFavoritesOnly')},alerts:{chain:checked('chainAlert'),stock:checked('stockAlert'),sound:checked('soundAlert'),restockReminder:checked('restockReminder')},disabledWidgets:WIDGET_IDS.filter(id=>!checked(`widget-${id}`))});
+  state=await send<PublicState>({type:'SAVE_SETTINGS',patch});render();report('Settings saved. Torn tabs update automatically.');handle(products());
 })());});
-document.querySelector<HTMLFormElement>('#key-form')!.addEventListener('submit',event=>{event.preventDefault();const target=event.currentTarget as HTMLFormElement;handle((async()=>{const key=field('tornKey',target).value.trim();await send({type:'SAVE_KEY',key,remember:(field('rememberKey',target) as HTMLInputElement).checked});field('tornKey',target).value='';await keyStatus();await products();report('Connected. Personal data comes directly from Torn. Enable YATA and Save settings for stocks.');})());});
+document.querySelector<HTMLFormElement>('#key-form')!.addEventListener('submit',event=>{event.preventDefault();const target=event.currentTarget as HTMLFormElement,key=field('tornKey',target).value.trim(),remember=(field('rememberKey',target) as HTMLInputElement).checked;connectionAction('Connecting to Torn API…',async()=>{await send({type:'SAVE_KEY',key,remember});field('tornKey',target).value='';await keyStatus();await products();report('Connected. Personal data comes directly from Torn. Enable YATA and Save settings for stocks.');});});
 document.querySelector('#disconnect-key')!.addEventListener('click',()=>handle((async()=>{await send({type:'DISCONNECT_KEY'});stocks=[];await keyStatus();document.querySelector('#product-list')!.replaceChildren();renderFavorites();report('API key removed');})()));
-document.querySelector('#refresh-data')!.addEventListener('click',()=>handle((async()=>{await send({type:'REFRESH_DATA'});await products();report('Data refreshed. Torn and YATA cache intervals still apply.');})()));
+document.querySelector('#refresh-data')!.addEventListener('click',()=>connectionAction('Refreshing Torn data…',async()=>{await send({type:'REFRESH_DATA'});await keyStatus();await products();report('Data refreshed. Torn and YATA cache intervals still apply.');}));
+document.querySelector('#test-connection')!.addEventListener('click',()=>connectionAction('Checking Chrome access and Torn API…',async()=>{await send({type:'TEST_CONNECTION'});await keyStatus();report('Chrome access and Torn API connection are working. No API key was sent by this test.');}));
 document.querySelector('#test-sound')!.addEventListener('click',()=>handle((async()=>{await send({type:'TEST_SOUND'});report('Warning sound played');})()));
-document.querySelector('#reset')!.addEventListener('click',()=>handle((async()=>{state=await send<PublicState>({type:'RESET_STATE'});render();report('Appearance and layouts reset. Your key and watches are retained.');})()));
 document.querySelector<HTMLFormElement>('#favorite-form')!.addEventListener('submit',event=>{event.preventDefault();const target=event.currentTarget as HTMLFormElement;handle((async()=>{const item=stocks.find(s=>`${s.country}:${s.itemId}`===field('product',target).value);if(!item)throw new Error('Connect your Torn API to load products');const favorite=FavoriteSchema.parse({itemId:item.itemId,name:item.name,country:item.country,minimumStock:Number(field('minimumStock',target).value),alert:(field('alert',target) as HTMLInputElement).checked});state=await send<PublicState>({type:'SAVE_FAVORITES',favorites:[...state.favorites.filter(f=>!(f.itemId===item.itemId&&f.country===item.country)),favorite]});renderFavorites();report('Product watch saved');})());});
 handle((async()=>{state=await send<PublicState>({type:'READ_STATE'});render();const connected=await keyStatus();report('Ready');if(connected)handle(products());})());
