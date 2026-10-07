@@ -92,6 +92,28 @@ describe('purchase evidence and automatic derived values',()=>{
     const app=trip(),before:Snapshot={source:'live',provider:'torn',generatedAt:now,war:{active:true,opponent:'Opponent',score:1,targetScore:10,endsAt:null},chain:null,travel:null,player:{level:null},stocks:[],targets:[]};
     expect(mergeSnapshot(before,{...before,war:null},app,now).war).toBeNull();expect(mergeSnapshot(before,{...before,war:null,issues:{war:'failed'}},app,now).war?.active).toBe(true);
   });
+  it('finalizes a saved foreign session when a fresh API confirms home after a missed return leg',()=>{
+    const app=trip();observeTravel(app,{state:'AT_HOME',destinationCountry:'Torn',source:'api',at:now+60000},now+60000);
+    expect(app.travel.state).toBe('LANDED');expect(app.travel.marketContextCountry).toBe('UAE');expect(app.travelSession).not.toBeNull();
+    finalizeDerived(app,now+76000,null);expect(app.travel.state).toBe('AT_HOME');expect(app.travelSession).toBeNull();expect(app.history).toHaveLength(1);expect(app.history[0]?.finalization).toBe('incomplete-evidence');
+  });
+  it('bounds finalization after confirmed home when purchase logs remain unavailable',()=>{
+    const app=trip();app.logAccess=true;observeTravel(app,{state:'AT_HOME',destinationCountry:'Torn',source:'api',at:now+60000},now+60000);
+    finalizeDerived(app,now+76000,null);expect(app.travelSession).not.toBeNull();
+    finalizeDerived(app,now+6*60000,null);expect(app.travelSession).toBeNull();expect(app.history[0]?.finalization).toBe('incomplete-evidence');
+  });
+  it('selects WAR after safely confirmed arrival while a trip waits for final purchase records',()=>{
+    const app=trip();app.logAccess=true;app.travel.state='LANDED';app.travel.destinationCountry='Torn';app.travel.homeConfirmedAt=Date.now()-20000;
+    const snapshot:Snapshot={source:'live',provider:'torn',generatedAt:Date.now(),travelApp:app,travel:{active:true,origin:'UAE',destination:'Torn',arrivesAt:Date.now()-20000},war:{id:8,opponentId:20,active:true,opponent:'Opponent',score:1,targetScore:10,endsAt:null,observedAt:Date.now()},chain:null,player:{level:40},stocks:[],targets:[]};
+    expect(new ModeManager().resolve(defaultState().settings,snapshot)).toBe('WAR');expect(app.travelSession).not.toBeNull();
+  });
+  it('retains cached opponent status on failure only for the same active war',()=>{
+    const app=trip(),target={id:123,name:'Opponent A',level:20,status:'Okay' as const,activity:'offline' as const,observedAt:now,hospitalUntil:null,wins:null,losses:null,battleStats:null};
+    const before:Snapshot={source:'live',provider:'torn',generatedAt:now,war:{id:8,opponentId:20,active:true,opponent:'Opponent',score:1,targetScore:10,endsAt:null},chain:null,travel:null,player:{level:40},stocks:[],targets:[target]};
+    expect(mergeSnapshot(before,{...before,targets:[],issues:{targets:'failed'}},app,now).targets).toEqual([target]);
+    expect(mergeSnapshot(before,{...before,war:{...before.war!,id:9,opponentId:30},targets:[],issues:{targets:'failed'}},app,now).targets).toEqual([]);
+    expect(mergeSnapshot(before,{...before,war:null,targets:[]},app,now).targets).toEqual([]);
+  });
   it('preserves newer page stocks and prices through failed or older API updates',()=>{
     const app=trip(),before:Snapshot={source:'live',provider:'torn',generatedAt:now,war:null,chain:null,travel:null,travelApp:app,player:{level:null},targets:[],stocks:[stock()]};
     const merged=mergeSnapshot(before,{...before,issues:{stocks:'failed'},stocks:[stock({stock:null,observedAt:null,tornValue:null})]},app,now+1000);expect(merged.stocks[0]?.stock).toBe(43);expect(merged.stocks[0]?.tornValue).toBe(70455);expect(app.quality).toBe('error-with-cache');

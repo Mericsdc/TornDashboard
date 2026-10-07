@@ -1,0 +1,1422 @@
+{
+  "stocks": {
+    "mex": {
+      "update": 1791358620,
+      "stocks": [
+        {
+          "id": 1499,
+          "name": "Obsidian Point",
+          "quantity": 543,
+          "cost": 145000
+        },
+        {
+          "id": 8,
+          "name": "Axe",
+          "quantity": 77,
+          "cost": 4200
+        },
+        {
+          "id": 11,
+          "name": "Samurai Sword",
+          "quantity": 0,
+          "cost": 75000
+        },
+        {
+          "id": 20,
+          "name": "Desert Eagle",
+          "quantity": 9,
+          "cost": 45000
+        },
+        {
+          "id": 26,
+          "name": "AK-47",
+          "quantity": 0,
+          "cost": 15000
+        },
+        {
+          "id": 31,
+          "name": "M249 SAW",
+          "quantity": 73,
+          "cost": 950000
+        },
+        {
+          "id": 50,
+          "name": "Outer Tactical Vest",
+          "quantity": 188,
+          "cost": 1000000
+        },
+        {
+          "id": 63,
+          "name": "Minigun",
+          "quantity": 12,
+          "cost": 3000000
+        },
+        {
+          "id": 99,
+          "name": "Springfield 1911",
+          "quantity": 34,
+          "cost": 430
+        },
+        {
+          "id": 107,
+          "name": "Trench Coat",
+          "quantity": 0,
+          "cost": 500000
+        },
+        {
+          "id": 108,
+          "name": "9mm Uzi",
+          "quantity": 25,
+          "cost": 1100000
+        },
+        {
+          "id": 110,
+          "name": "Leather Bullwhip",
+          "quantity": 242,
+          "cost": 1500
+        },
+        {
+          "id": 111,
+          "name": "Ninja Claws",
+          "quantity": 11,
+          "cost": 8000
+        },
+        {
+          "id": 159,
+          "name": "Bolt Cutters",
+          "quantity": 92,
+          "cost": 25
+        },
+        {
+          "id": 175,
+          "name": "Taser",
+          "quantity": 17,
+          "cost": 5500
+        },
+        {
+          "id": 177,
+          "name": "Cobra Derringer",
+          "quantity": 5,
+          "cost": 70000
+        },
+        {
+          "id": 178,
+          "name": "Flak Jacket",
+          "quantity": 37,
+          "cost": 7500
+        },
+        {
+          "id": 229,
+          "name": "Claymore Mine",
+          "quantity": 15,
+          "cost": 15000
+        },
+        {
+          "id": 230,
+          "name": "Flare Gun",
+          "quantity": 25,
+          "cost": 300
+        },
+        {
+          "id": 231,
+          "name": "Heckler & Koch SL8",
+          "quantity": 30,
+          "cost": 45000
+        },
+        {
+          "id": 258,
+          "name": "Jaguar Plushie",
+          "quantity": 636,
+          "cost": 10000
+        },
+        {
+          "id": 259,
+          "name": "Mayan Statue",
+          "quantity": 200,
+          "cost": 500
+        },
+        {
+          "id": 260,
+          "name": "Dahlia",
+          "quantity": 5087,
+          "cost": 300
+        },
+        {
+          "id": 399,
+          "name": "ArmaLite M-15A4",
+          "quantity": 0,
+          "cost": 20000000
+        },
+        {
+          "id": 409,
+          "name": "Yucca Plant",
+          "quantity": 55,
+          "cost": 20000
+        },
+        {
+          "id": 426,
+          "name": "Bottle of Tequila",
+          "quantity": 515,
+          "cost": 85
+        },
+        {
+          "id": 432,
+          "name": "Crazy Straw",
+          "quantity": 0,
+          "cost": 25
+        },
+        {
+          "id": 640,
+          "name": "Kevlar Gloves",
+          "quantity": 234,
+          "cost": 400000
+        },
+        {
+          "id": 1125,
+          "name": "Card Skimmer",
+          "quantity": 8081,
+          "cost": 175
+        },
+        {
+          "id": 1429,
+          "name": "Zip Ties",
+          "quantity": 0,
+          "cost": 25
+        }
+      ]
+    },
+    "cay": {
+      "update": 1791358672,
+      "stocks": [
+        {
+          "id": 612,
+          "name": "Tavor TAR-21",
+          "quantity": 71,
+          "cost": 495000
+        },
+        {
+          "id": 613,
+          "name": "Harpoon",
+          "quantity": 25,
+          "cost": 300000
+        },
+        {
+          "id": 614,
+          "name": "Diamond Bladed Knife",
+          "quantity": 68,
+          "cost": 950000
+        },
+        {
+          "id": 615,
+          "name": "Naval Cutlass",
+          "quantity": 2,
+          "cost": 50000000
+        },
+        {
+          "id": 616,
+          "name": "Trout",
+          "quantity": 75,
+          "cost": 3
+        },
+        {
+          "id": 617,
+          "name": "Banana Orchid",
+          "quantity": 9281,
+          "cost": 4000
+        },
+        {
+          "id": 618,
+          "name": "Stingray Plushie",
+          "quantity": 0,
+          "cost": 400
+        },
+        {
+          "id": 619,
+          "name": "Steel Drum",
+          "quantity": 25,
+          "cost": 1500
+        },
+        {
+          "id": 620,
+          "name": "Nodding Turtle",
+          "quantity": 44,
+          "cost": 750
+        },
+        {
+          "id": 621,
+          "name": "Snorkel",
+          "quantity": 0,
+          "cost": 20000
+        },
+        {
+          "id": 622,
+          "name": "Flippers",
+          "quantity": 46,
+          "cost": 10000
+        },
+        {
+          "id": 623,
+          "name": "Speedo",
+          "quantity": 10,
+          "cost": 6000
+        },
+        {
+          "id": 624,
+          "name": "Bikini",
+          "quantity": 40,
+          "cost": 8000
+        },
+        {
+          "id": 625,
+          "name": "Wetsuit",
+          "quantity": 0,
+          "cost": 30000
+        },
+        {
+          "id": 626,
+          "name": "Diving Gloves",
+          "quantity": 18,
+          "cost": 5000
+        },
+        {
+          "id": 1482,
+          "name": "Bearer Bond",
+          "quantity": 1592,
+          "cost": 99392
+        }
+      ]
+    },
+    "can": {
+      "update": 1791358606,
+      "stocks": [
+        {
+          "id": 196,
+          "name": "Cannabis",
+          "quantity": 220,
+          "cost": 3250
+        },
+        {
+          "id": 197,
+          "name": "Ecstasy",
+          "quantity": 577,
+          "cost": 35215
+        },
+        {
+          "id": 201,
+          "name": "PCP",
+          "quantity": 975,
+          "cost": 6097
+        },
+        {
+          "id": 205,
+          "name": "Vicodin",
+          "quantity": 611,
+          "cost": 1704
+        },
+        {
+          "id": 206,
+          "name": "Xanax",
+          "quantity": 533,
+          "cost": 862628
+        },
+        {
+          "id": 252,
+          "name": "Ithaca 37",
+          "quantity": 50,
+          "cost": 10000
+        },
+        {
+          "id": 253,
+          "name": "Lorcin 380",
+          "quantity": 50,
+          "cost": 300
+        },
+        {
+          "id": 261,
+          "name": "Wolverine Plushie",
+          "quantity": 743,
+          "cost": 30
+        },
+        {
+          "id": 262,
+          "name": "Hockey Stick",
+          "quantity": 69,
+          "cost": 400
+        },
+        {
+          "id": 263,
+          "name": "Crocus",
+          "quantity": 0,
+          "cost": 600
+        },
+        {
+          "id": 328,
+          "name": "PVC Cards",
+          "quantity": 281,
+          "cost": 12500
+        },
+        {
+          "id": 402,
+          "name": "Ice Pick",
+          "quantity": 36,
+          "cost": 20000
+        },
+        {
+          "id": 410,
+          "name": "Fire Hydrant",
+          "quantity": 49,
+          "cost": 20000
+        },
+        {
+          "id": 413,
+          "name": "Mountie Hat",
+          "quantity": 24,
+          "cost": 30000
+        },
+        {
+          "id": 645,
+          "name": "Safety Boots",
+          "quantity": 0,
+          "cost": 77000
+        },
+        {
+          "id": 1484,
+          "name": "Bear Gall",
+          "quantity": 938,
+          "cost": 30782
+        },
+        {
+          "id": 1348,
+          "name": "Aluminum Plate",
+          "quantity": 1942,
+          "cost": 1125
+        },
+        {
+          "id": 1361,
+          "name": "Dog Treats",
+          "quantity": 670,
+          "cost": 25
+        },
+        {
+          "id": 1483,
+          "name": "Insulin",
+          "quantity": 0,
+          "cost": 2334
+        },
+        {
+          "id": 1504,
+          "name": "Quartz Point",
+          "quantity": 0,
+          "cost": 131743
+        }
+      ]
+    },
+    "haw": {
+      "update": 1791358666,
+      "stocks": [
+        {
+          "id": 240,
+          "name": "Type 98 Anti Tank",
+          "quantity": 2,
+          "cost": 25000000
+        },
+        {
+          "id": 241,
+          "name": "Bushmaster Carbon 15",
+          "quantity": 83,
+          "cost": 15000
+        },
+        {
+          "id": 242,
+          "name": "HEG",
+          "quantity": 168,
+          "cost": 20000
+        },
+        {
+          "id": 243,
+          "name": "Taurus PT92",
+          "quantity": 0,
+          "cost": 650
+        },
+        {
+          "id": 264,
+          "name": "Orchid",
+          "quantity": 7039,
+          "cost": 700
+        },
+        {
+          "id": 265,
+          "name": "Pele Charm",
+          "quantity": 0,
+          "cost": 2000
+        },
+        {
+          "id": 419,
+          "name": "Small Suitcase",
+          "quantity": 0,
+          "cost": 2000000
+        },
+        {
+          "id": 420,
+          "name": "Medium Suitcase",
+          "quantity": 8,
+          "cost": 4000000
+        },
+        {
+          "id": 421,
+          "name": "Large Suitcase",
+          "quantity": 12,
+          "cost": 10000000
+        },
+        {
+          "id": 430,
+          "name": "Coconut Bra",
+          "quantity": 0,
+          "cost": 750000
+        },
+        {
+          "id": 1502,
+          "name": "Basalt Point",
+          "quantity": 1000,
+          "cost": 118000
+        },
+        {
+          "id": 1485,
+          "name": "Shark Fin",
+          "quantity": 0,
+          "cost": 20210
+        },
+        {
+          "id": 1486,
+          "name": "Turtle Shell",
+          "quantity": 0,
+          "cost": 64884
+        }
+      ]
+    },
+    "uni": {
+      "update": 1791358620,
+      "stocks": [
+        {
+          "id": 196,
+          "name": "Cannabis",
+          "quantity": 557,
+          "cost": 2855
+        },
+        {
+          "id": 197,
+          "name": "Ecstasy",
+          "quantity": 3,
+          "cost": 30685
+        },
+        {
+          "id": 198,
+          "name": "Ketamine",
+          "quantity": 282,
+          "cost": 1076
+        },
+        {
+          "id": 201,
+          "name": "PCP",
+          "quantity": 340,
+          "cost": 7388
+        },
+        {
+          "id": 203,
+          "name": "Shrooms",
+          "quantity": 359,
+          "cost": 917
+        },
+        {
+          "id": 205,
+          "name": "Vicodin",
+          "quantity": 512,
+          "cost": 1758
+        },
+        {
+          "id": 206,
+          "name": "Xanax",
+          "quantity": 2052,
+          "cost": 843691
+        },
+        {
+          "id": 217,
+          "name": "Claymore Sword",
+          "quantity": 0,
+          "cost": 100000
+        },
+        {
+          "id": 218,
+          "name": "Crossbow",
+          "quantity": 72,
+          "cost": 900
+        },
+        {
+          "id": 219,
+          "name": "Enfield SA-80",
+          "quantity": 173,
+          "cost": 250000
+        },
+        {
+          "id": 220,
+          "name": "Grenade",
+          "quantity": 64,
+          "cost": 10000
+        },
+        {
+          "id": 221,
+          "name": "Stick Grenade",
+          "quantity": 78,
+          "cost": 8000
+        },
+        {
+          "id": 266,
+          "name": "Nessie Plushie",
+          "quantity": 0,
+          "cost": 200
+        },
+        {
+          "id": 267,
+          "name": "Heather",
+          "quantity": 0,
+          "cost": 5000
+        },
+        {
+          "id": 268,
+          "name": "Red Fox Plushie",
+          "quantity": 0,
+          "cost": 1000
+        },
+        {
+          "id": 397,
+          "name": "Flail",
+          "quantity": 0,
+          "cost": 8000000
+        },
+        {
+          "id": 408,
+          "name": "Sextant",
+          "quantity": 24,
+          "cost": 25000
+        },
+        {
+          "id": 411,
+          "name": "Model Space Ship",
+          "quantity": 12,
+          "cost": 17500
+        },
+        {
+          "id": 415,
+          "name": "Ship in a Bottle",
+          "quantity": 0,
+          "cost": 40000
+        },
+        {
+          "id": 416,
+          "name": "Paper Weight",
+          "quantity": 0,
+          "cost": 1500
+        },
+        {
+          "id": 418,
+          "name": "Tailor's Dummy",
+          "quantity": 0,
+          "cost": 10000
+        },
+        {
+          "id": 431,
+          "name": "Dart Board",
+          "quantity": 21,
+          "cost": 750
+        },
+        {
+          "id": 438,
+          "name": "Cricket Bat",
+          "quantity": 0,
+          "cost": 15000
+        },
+        {
+          "id": 439,
+          "name": "Frying Pan",
+          "quantity": 11,
+          "cost": 400
+        },
+        {
+          "id": 641,
+          "name": "WWII Helmet",
+          "quantity": 0,
+          "cost": 89500
+        },
+        {
+          "id": 1246,
+          "name": "Inkwell",
+          "quantity": 0,
+          "cost": 375
+        },
+        {
+          "id": 1501,
+          "name": "Chert Point",
+          "quantity": 0,
+          "cost": 115593
+        }
+      ]
+    },
+    "arg": {
+      "update": 1791358642,
+      "stocks": [
+        {
+          "id": 196,
+          "name": "Cannabis",
+          "quantity": 947,
+          "cost": 2963
+        },
+        {
+          "id": 198,
+          "name": "Ketamine",
+          "quantity": 925,
+          "cost": 994
+        },
+        {
+          "id": 199,
+          "name": "LSD",
+          "quantity": 447,
+          "cost": 21573
+        },
+        {
+          "id": 203,
+          "name": "Shrooms",
+          "quantity": 182,
+          "cost": 1138
+        },
+        {
+          "id": 204,
+          "name": "Speed",
+          "quantity": 273,
+          "cost": 4956
+        },
+        {
+          "id": 255,
+          "name": "Flamethrower",
+          "quantity": 65,
+          "cost": 3000000
+        },
+        {
+          "id": 256,
+          "name": "Tear Gas",
+          "quantity": 0,
+          "cost": 15000
+        },
+        {
+          "id": 257,
+          "name": "Throwing Knife",
+          "quantity": 0,
+          "cost": 35000
+        },
+        {
+          "id": 269,
+          "name": "Monkey Plushie",
+          "quantity": 0,
+          "cost": 400
+        },
+        {
+          "id": 270,
+          "name": "Soccer Ball",
+          "quantity": 110,
+          "cost": 50
+        },
+        {
+          "id": 271,
+          "name": "Ceibo Flower",
+          "quantity": 0,
+          "cost": 500
+        },
+        {
+          "id": 333,
+          "name": "Liquid Body Armor",
+          "quantity": 98,
+          "cost": 7500000
+        },
+        {
+          "id": 391,
+          "name": "Macana",
+          "quantity": 239,
+          "cost": 100000
+        },
+        {
+          "id": 407,
+          "name": "Compass",
+          "quantity": 0,
+          "cost": 2500
+        },
+        {
+          "id": 1466,
+          "name": "Lighter",
+          "quantity": 637,
+          "cost": 5
+        },
+        {
+          "id": 1503,
+          "name": "Chalcedony Point",
+          "quantity": 0,
+          "cost": 108249
+        },
+        {
+          "id": 1488,
+          "name": "Meteorite Fragment",
+          "quantity": 4059,
+          "cost": 410643
+        },
+        {
+          "id": 1487,
+          "name": "Patagonian Fossil",
+          "quantity": 0,
+          "cost": 568617
+        }
+      ]
+    },
+    "swi": {
+      "update": 1791358630,
+      "stocks": [
+        {
+          "id": 196,
+          "name": "Cannabis",
+          "quantity": 407,
+          "cost": 2841
+        },
+        {
+          "id": 198,
+          "name": "Ketamine",
+          "quantity": 975,
+          "cost": 1026
+        },
+        {
+          "id": 199,
+          "name": "LSD",
+          "quantity": 57,
+          "cost": 30992
+        },
+        {
+          "id": 201,
+          "name": "PCP",
+          "quantity": 132,
+          "cost": 6386
+        },
+        {
+          "id": 203,
+          "name": "Shrooms",
+          "quantity": 998,
+          "cost": 1207
+        },
+        {
+          "id": 204,
+          "name": "Speed",
+          "quantity": 237,
+          "cost": 4812
+        },
+        {
+          "id": 222,
+          "name": "Flash Grenade",
+          "quantity": 0,
+          "cost": 12000
+        },
+        {
+          "id": 223,
+          "name": "Jackhammer",
+          "quantity": 56,
+          "cost": 5000000
+        },
+        {
+          "id": 224,
+          "name": "Swiss Army Knife",
+          "quantity": 211,
+          "cost": 2500
+        },
+        {
+          "id": 272,
+          "name": "Edelweiss",
+          "quantity": 608,
+          "cost": 900
+        },
+        {
+          "id": 273,
+          "name": "Chamois Plushie",
+          "quantity": 1679,
+          "cost": 400
+        },
+        {
+          "id": 361,
+          "name": "Neumune Tablet",
+          "quantity": 0,
+          "cost": 900000
+        },
+        {
+          "id": 398,
+          "name": "SIG 552",
+          "quantity": 10,
+          "cost": 7500000
+        },
+        {
+          "id": 435,
+          "name": "Dozen White Roses",
+          "quantity": 1,
+          "cost": 950000000
+        },
+        {
+          "id": 436,
+          "name": "Snowboard",
+          "quantity": 0,
+          "cost": 6000
+        },
+        {
+          "id": 1489,
+          "name": "Ephedrine Powder",
+          "quantity": 2413,
+          "cost": 14287
+        },
+        {
+          "id": 1491,
+          "name": "Ergotamine Ampoule",
+          "quantity": 0,
+          "cost": 4284
+        },
+        {
+          "id": 1490,
+          "name": "Safrole Oil",
+          "quantity": 1260,
+          "cost": 4315
+        }
+      ]
+    },
+    "jap": {
+      "update": 1791358591,
+      "stocks": [
+        {
+          "id": 197,
+          "name": "Ecstasy",
+          "quantity": 21,
+          "cost": 29512
+        },
+        {
+          "id": 198,
+          "name": "Ketamine",
+          "quantity": 382,
+          "cost": 1156
+        },
+        {
+          "id": 200,
+          "name": "Opium",
+          "quantity": 898,
+          "cost": 19843
+        },
+        {
+          "id": 203,
+          "name": "Shrooms",
+          "quantity": 379,
+          "cost": 987
+        },
+        {
+          "id": 204,
+          "name": "Speed",
+          "quantity": 1,
+          "cost": 5435
+        },
+        {
+          "id": 205,
+          "name": "Vicodin",
+          "quantity": 258,
+          "cost": 1747
+        },
+        {
+          "id": 206,
+          "name": "Xanax",
+          "quantity": 0,
+          "cost": 730228
+        },
+        {
+          "id": 233,
+          "name": "BT MP9",
+          "quantity": 334,
+          "cost": 55000
+        },
+        {
+          "id": 234,
+          "name": "Chain Whip",
+          "quantity": 0,
+          "cost": 2500
+        },
+        {
+          "id": 235,
+          "name": "Wooden Nunchaku",
+          "quantity": 19,
+          "cost": 5000
+        },
+        {
+          "id": 236,
+          "name": "Kama",
+          "quantity": 9,
+          "cost": 50000
+        },
+        {
+          "id": 237,
+          "name": "Kodachi",
+          "quantity": 470,
+          "cost": 95000
+        },
+        {
+          "id": 238,
+          "name": "Sai",
+          "quantity": 0,
+          "cost": 1000
+        },
+        {
+          "id": 239,
+          "name": "Ninja Star",
+          "quantity": 73,
+          "cost": 500
+        },
+        {
+          "id": 277,
+          "name": "Cherry Blossom",
+          "quantity": 7433,
+          "cost": 500
+        },
+        {
+          "id": 278,
+          "name": "Kabuki Mask",
+          "quantity": 48,
+          "cost": 10000
+        },
+        {
+          "id": 279,
+          "name": "Maneki Neko",
+          "quantity": 54,
+          "cost": 50000
+        },
+        {
+          "id": 294,
+          "name": "Bottle of Sake",
+          "quantity": 4,
+          "cost": 39
+        },
+        {
+          "id": 334,
+          "name": "Flexible Body Armor",
+          "quantity": 40,
+          "cost": 15000000
+        },
+        {
+          "id": 395,
+          "name": "Metal Nunchaku",
+          "quantity": 91,
+          "cost": 400000
+        },
+        {
+          "id": 427,
+          "name": "Sumo Doll",
+          "quantity": 32,
+          "cost": 300
+        },
+        {
+          "id": 429,
+          "name": "Chopsticks",
+          "quantity": 50,
+          "cost": 25
+        },
+        {
+          "id": 433,
+          "name": "Sensu",
+          "quantity": 2,
+          "cost": 500
+        },
+        {
+          "id": 434,
+          "name": "Yakitori Lantern",
+          "quantity": 19,
+          "cost": 4500
+        },
+        {
+          "id": 437,
+          "name": "Glow Stick",
+          "quantity": 454,
+          "cost": 10
+        },
+        {
+          "id": 1333,
+          "name": "Bonded Latex",
+          "quantity": 1691,
+          "cost": 220000
+        },
+        {
+          "id": 1249,
+          "name": "Hydrochloric Acid",
+          "quantity": 0,
+          "cost": 24250
+        },
+        {
+          "id": 1492,
+          "name": "Counterfeit Manga",
+          "quantity": 0,
+          "cost": 22694
+        },
+        {
+          "id": 1493,
+          "name": "Whale Meat",
+          "quantity": 0,
+          "cost": 2020
+        }
+      ]
+    },
+    "chi": {
+      "update": 1791358672,
+      "stocks": [
+        {
+          "id": 197,
+          "name": "Ecstasy",
+          "quantity": 835,
+          "cost": 28631
+        },
+        {
+          "id": 199,
+          "name": "LSD",
+          "quantity": 971,
+          "cost": 21294
+        },
+        {
+          "id": 200,
+          "name": "Opium",
+          "quantity": 429,
+          "cost": 20125
+        },
+        {
+          "id": 201,
+          "name": "PCP",
+          "quantity": 806,
+          "cost": 6451
+        },
+        {
+          "id": 204,
+          "name": "Speed",
+          "quantity": 811,
+          "cost": 5363
+        },
+        {
+          "id": 244,
+          "name": "Blowgun",
+          "quantity": 45,
+          "cost": 2500
+        },
+        {
+          "id": 245,
+          "name": "Bo Staff",
+          "quantity": 22,
+          "cost": 500
+        },
+        {
+          "id": 246,
+          "name": "Fireworks",
+          "quantity": 24,
+          "cost": 500
+        },
+        {
+          "id": 247,
+          "name": "Katana",
+          "quantity": 20,
+          "cost": 16000
+        },
+        {
+          "id": 248,
+          "name": "Qsz-92",
+          "quantity": 41,
+          "cost": 90000
+        },
+        {
+          "id": 249,
+          "name": "SKS Carbine",
+          "quantity": 19,
+          "cost": 6500
+        },
+        {
+          "id": 250,
+          "name": "Twin Tiger Hooks",
+          "quantity": 0,
+          "cost": 50000
+        },
+        {
+          "id": 251,
+          "name": "Wushu Double Axes",
+          "quantity": 0,
+          "cost": 75000
+        },
+        {
+          "id": 274,
+          "name": "Panda Plushie",
+          "quantity": 116,
+          "cost": 400
+        },
+        {
+          "id": 275,
+          "name": "Jade Buddha",
+          "quantity": 100,
+          "cost": 12000
+        },
+        {
+          "id": 276,
+          "name": "Peony",
+          "quantity": 2094,
+          "cost": 5000
+        },
+        {
+          "id": 326,
+          "name": "Printing Paper",
+          "quantity": 69,
+          "cost": 75000
+        },
+        {
+          "id": 335,
+          "name": "Stick of Dynamite",
+          "quantity": 58,
+          "cost": 50000
+        },
+        {
+          "id": 400,
+          "name": "Guandao",
+          "quantity": 18,
+          "cost": 200000
+        },
+        {
+          "id": 1462,
+          "name": "Magnesium Shavings",
+          "quantity": 991,
+          "cost": 22000
+        },
+        {
+          "id": 1494,
+          "name": "Pangolin Scales",
+          "quantity": 3617,
+          "cost": 133572
+        },
+        {
+          "id": 1498,
+          "name": "Tiger Bone Powder",
+          "quantity": 1492,
+          "cost": 29719
+        }
+      ]
+    },
+    "uae": {
+      "update": 1791358647,
+      "stocks": [
+        {
+          "id": 381,
+          "name": "Gold Laptop",
+          "quantity": 1,
+          "cost": 8000000000
+        },
+        {
+          "id": 382,
+          "name": "Gold Plated AK-47",
+          "quantity": 1,
+          "cost": 25000000000
+        },
+        {
+          "id": 384,
+          "name": "Camel Plushie",
+          "quantity": 183,
+          "cost": 14000
+        },
+        {
+          "id": 385,
+          "name": "Tribulus Omanense",
+          "quantity": 4936,
+          "cost": 6000
+        },
+        {
+          "id": 386,
+          "name": "Sports Sneakers",
+          "quantity": 1,
+          "cost": 14000000000
+        },
+        {
+          "id": 387,
+          "name": "Handbag",
+          "quantity": 1,
+          "cost": 16000000000
+        },
+        {
+          "id": 388,
+          "name": "Pink Mac-10",
+          "quantity": 1,
+          "cost": 23000000000
+        },
+        {
+          "id": 412,
+          "name": "Sports Shades",
+          "quantity": 28,
+          "cost": 10000
+        },
+        {
+          "id": 414,
+          "name": "Proda Sunglasses",
+          "quantity": 50,
+          "cost": 100000
+        },
+        {
+          "id": 1264,
+          "name": "Potassium Nitrate",
+          "quantity": 1863,
+          "cost": 3750
+        },
+        {
+          "id": 1495,
+          "name": "Ambergris Lump",
+          "quantity": 0,
+          "cost": 358000
+        },
+        {
+          "id": 1496,
+          "name": "Natural Pearls",
+          "quantity": 2951,
+          "cost": 95344
+        }
+      ]
+    },
+    "sou": {
+      "update": 1791358649,
+      "stocks": [
+        {
+          "id": 4,
+          "name": "Knuckle Dusters",
+          "quantity": 132,
+          "cost": 750
+        },
+        {
+          "id": 199,
+          "name": "LSD",
+          "quantity": 164,
+          "cost": 21451
+        },
+        {
+          "id": 200,
+          "name": "Opium",
+          "quantity": 376,
+          "cost": 20030
+        },
+        {
+          "id": 201,
+          "name": "PCP",
+          "quantity": 739,
+          "cost": 6499
+        },
+        {
+          "id": 203,
+          "name": "Shrooms",
+          "quantity": 489,
+          "cost": 969
+        },
+        {
+          "id": 206,
+          "name": "Xanax",
+          "quantity": 841,
+          "cost": 835927
+        },
+        {
+          "id": 225,
+          "name": "Mag 7",
+          "quantity": 85,
+          "cost": 60000
+        },
+        {
+          "id": 226,
+          "name": "Smoke Grenade",
+          "quantity": 1065,
+          "cost": 20000
+        },
+        {
+          "id": 227,
+          "name": "Spear",
+          "quantity": 1,
+          "cost": 600
+        },
+        {
+          "id": 228,
+          "name": "Vektor CR-21",
+          "quantity": 1,
+          "cost": 7500
+        },
+        {
+          "id": 280,
+          "name": "Elephant Statue",
+          "quantity": 89,
+          "cost": 500
+        },
+        {
+          "id": 281,
+          "name": "Lion Plushie",
+          "quantity": 0,
+          "cost": 400
+        },
+        {
+          "id": 282,
+          "name": "African Violet",
+          "quantity": 3746,
+          "cost": 2000
+        },
+        {
+          "id": 332,
+          "name": "Combat Vest",
+          "quantity": 32,
+          "cost": 3500000
+        },
+        {
+          "id": 358,
+          "name": "Raw Ivory",
+          "quantity": 1397,
+          "cost": 1811
+        },
+        {
+          "id": 406,
+          "name": "Afro Comb",
+          "quantity": 0,
+          "cost": 50000
+        },
+        {
+          "id": 651,
+          "name": "Combat Helmet",
+          "quantity": 5,
+          "cost": 3100000
+        },
+        {
+          "id": 652,
+          "name": "Combat Pants",
+          "quantity": 46,
+          "cost": 2950000
+        },
+        {
+          "id": 653,
+          "name": "Combat Boots",
+          "quantity": 36,
+          "cost": 2400000
+        },
+        {
+          "id": 654,
+          "name": "Combat Gloves",
+          "quantity": 14,
+          "cost": 2100000
+        },
+        {
+          "id": 1500,
+          "name": "Quartzite Point",
+          "quantity": 698,
+          "cost": 112862
+        },
+        {
+          "id": 1497,
+          "name": "Uncut Diamonds",
+          "quantity": 1042,
+          "cost": 200568
+        }
+      ]
+    }
+  },
+  "timestamp": 1791358677
+}

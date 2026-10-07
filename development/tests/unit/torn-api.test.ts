@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { TornApi, joinStocks } from '../../packages/extension/src/services/torn-api';
 import { requireTornAccess, requestTornAccess, testTornConnection } from '../../packages/extension/src/services/torn-connection';
@@ -9,7 +10,7 @@ const payloads:Record<string,unknown>={
   'user/profile':{profile:{id:55,name:'Fixture player',level:40,status:{state:'Traveling',description:'Traveling to Torn'}}},
   'user/travel':{travel:{destination:'Torn',departed_at:now/1000-100,arrival_at:now/1000+500,time_left:500}},
   'faction/chain':{chain:{id:42,current:49,max:49,timeout:30,start:now/1000-500,end:0}},
-  'faction/wars':{wars:{ranked:{war_id:8,start:now/1000-10000,end:null,winner:null,target:1000,factions:[{id:10,name:'Our faction',score:450},{id:20,name:'Actual opponent',score:200}]}}},
+  'faction/10/wars':{wars:{ranked:{war_id:8,start:now/1000-10000,end:null,winner:null,target:1000,factions:[{id:10,name:'Our faction',score:450},{id:20,name:'Actual opponent',score:200}]}}},
   'faction/20/members':{members:[{id:123,name:'Opponent A',level:20,status:{state:'Okay',description:'Okay',until:null},last_action:{status:'Offline'}},{id:124,name:'Opponent hospital',level:30,status:{state:'Hospital',description:'Hospital',until:now/1000+120},last_action:{status:'Online'}}]},
   'torn/items':{items:[{id:1,name:'Camel Plushie',value:{market_price:30,shops:[{country:'UAE',buy_price:10}]}},{id:2,name:'Xanax',value:{market_price:50,shops:[{country:'Switzerland',buy_price:20}]}}]}
 };
@@ -18,7 +19,7 @@ function network(extra:Record<string,unknown>={}){
     const url=new URL(String(input));
     if(url.hostname==='yata.yt'){expect(new Headers(options?.headers).has('authorization')).toBe(false);return new Response(JSON.stringify(extra.yata??{stocks:{uae:{update:now/1000,stocks:[{id:1,quantity:15},{id:2,quantity:100}]}}}));}
     expect(new Headers(options?.headers).get('authorization')).toBe('ApiKey TESTONLYKEY12345');expect(url.searchParams.has('key')).toBe(false);
-    const path=url.pathname.replace('/v2/','');return new Response(JSON.stringify(extra[path]??payloads[path]));
+    const path=url.pathname.slice(4);return new Response(JSON.stringify(extra[path]??payloads[path]));
   });
 }
 describe('direct Torn API adapter',()=>{
@@ -39,6 +40,68 @@ describe('direct Torn API adapter',()=>{
     expect(data.stocks.find(s=>s.country==='Switzerland')?.stock).toBeNull();expect(marketRows(data,defaultState().settings.market,[],now)).toHaveLength(1);expect(data.stocks[0]?.stock).toBe(15);expect(JSON.stringify(data)).not.toContain('TESTONLY');
     const calls=request.mock.calls.length;await api.snapshot('yata',{});expect(request.mock.calls).toHaveLength(calls);
     const chainUrl=String(request.mock.calls.find(([url])=>String(url).includes('faction/chain'))?.[0]);expect(chainUrl).toContain('timestamp=');
+  });
+  it('recovers the BOS vs EPIC war from the same Torn ranked-war list as BOSBOT, without a bot credential',async()=>{
+    const factions=[{id:49122,name:'Balls of Steel MC',score:450,chain:4},{id:54175,name:'EPIC Warmong3rs',score:200,chain:0}];
+    const row=(id:number,start:number,end:number,winner:number)=>({id,start,end,winner,target:1000,factions});
+    const request=network({
+      'key/info':{info:{user:{id:55,faction_id:49122,company_id:null},access:{level:3,type:'Limited'},selections:{}}},
+      'faction/49122/wars':{wars:{ranked:null}},
+      'faction/49122/rankedwars':{rankedwars:[row(777,now/1000-1000,0,0),row(900,now/1000-100000,now/1000-50000,49122),row(901,now/1000+600,0,0)]},
+      'faction/54175/members':payloads['faction/20/members']
+    });
+    const api=new TornApi('TESTONLYKEY12345',request,()=>now),data=await api.snapshot('yata',{});
+    expect(data.war).toMatchObject({id:777,active:true,opponentId:54175,opponent:'EPIC Warmong3rs'});expect(data.targets).toHaveLength(2);expect(data.issues?.war).toBeUndefined();
+    const calls=request.mock.calls.length;await api.snapshot('yata',{});expect(request).toHaveBeenCalledTimes(calls);
+    const restored=new TornApi('TESTONLYKEY12345',request,()=>now);restored.restoreCache(api.exportCache());await restored.snapshot('yata',{});
+    expect(request.mock.calls.filter(([u])=>String(u).includes('/faction/49122/rankedwars?'))).toHaveLength(1);
+    for(const[u,o]of request.mock.calls){expect(new URL(String(u)).searchParams.has('key')).toBe(false);if(String(u).includes('yata'))expect(new Headers(o?.headers).has('authorization')).toBe(false);}
+  });
+  it('uses a fresh profile faction rather than a stale key-info faction',async()=>{
+    const request=network({'user/profile':{profile:{id:55,name:'Fixture',level:40,faction_id:49122,status:{state:'Okay'}}},'faction/49122/wars':{wars:{ranked:{war_id:8,start:now/1000-100,end:0,winner:0,target:1000,factions:[{id:49122,name:'Our faction',score:1},{id:20,name:'Actual opponent',score:2}]}}}});
+    const data=await new TornApi('TESTONLYKEY12345',request,()=>now).snapshot('off',{});expect(data.war?.active).toBe(true);expect(data.player.factionId).toBe(49122);expect(request.mock.calls.some(([u])=>String(u).includes('/faction/10/wars'))).toBe(false);
+  });
+  it('does not let a failed chain read block travel, catalog, opponents or YATA',async()=>{
+    const base=network(),request=vi.fn<typeof fetch>(async(u,o)=>String(u).includes('faction/chain')?new Response('',{status:503}):base(u,o));
+    const api=new TornApi('TESTONLYKEY12345',request,()=>now),data=await api.snapshot('yata',{});
+    expect(data.issues?.chain).toContain('HTTP 503');expect(data.travel?.active).toBe(true);expect(data.war?.active).toBe(true);expect(data.targets).toHaveLength(2);expect(data.stocks[0]?.stock).toBe(15);
+    await api.snapshot('yata',{});expect(request.mock.calls.filter(([u])=>String(u).includes('faction/chain'))).toHaveLength(1);
+  });
+  it('continues war and stock reads when travel returns an HTTP error',async()=>{
+    const base=network(),request=vi.fn<typeof fetch>(async(u,o)=>String(u).includes('user/travel')?new Response('',{status:403}):base(u,o));
+    const data=await new TornApi('TESTONLYKEY12345',request,()=>now).snapshot('yata',{});expect(data.issues?.travel).toContain('HTTP 403');expect(data.war?.active).toBe(true);expect(data.targets).toHaveLength(2);expect(data.stocks[0]?.stock).toBe(15);
+  });
+  it('reports a failed history cross-check rather than confidently saying no war exists',async()=>{
+    const data=await new TornApi('TESTONLYKEY12345',network({'faction/10/wars':{wars:{ranked:null}},'faction/10/rankedwars':{error:{code:7}}}),()=>now).snapshot('yata',{});expect(data.war).toBeNull();expect(data.issues?.warFallback).toContain('does not allow');expect(data.stocks[0]?.stock).toBe(15);
+  });
+  it('retains real YATA products and stocks when Torn prices are unavailable',async()=>{
+    const base=network({yata:{stocks:{uae:{update:now/1000,stocks:[{id:1,name:'Camel Plushie',cost:14000,quantity:18}]},jap:{update:now/1000,stocks:[{id:4,name:'Monkey Plushie',cost:10000,quantity:12}]}}}}),request=vi.fn<typeof fetch>(async(u,o)=>String(u).includes('torn/items')?new Response('',{status:503}):base(u,o));
+    const data=await new TornApi('TESTONLYKEY12345',request,()=>now).snapshot('yata',{});
+    expect(data.stocks).toHaveLength(2);expect(data.stocks[0]).toMatchObject({country:'UAE',name:'Camel Plushie',cost:14000,stock:18,tornValue:null});expect(data.war?.active).toBe(true);expect(data.issues?.prices).toContain('HTTP 503');expect(data.issues?.stocks).toBeUndefined();
+  });
+  it('re-fetches incompatible restored caches instead of failing every read until their TTL expires',async()=>{
+    const request=network(),api=new TornApi('TESTONLYKEY12345',request,()=>now);api.restoreCache([['torn/items',{at:now,value:{items:{legacy:'wrong format'}}}]]);
+    const data=await api.snapshot('yata',{});expect(data.stocks[0]?.tornValue).toBe(30);expect(data.issues?.prices).toBeUndefined();expect(request.mock.calls.some(([u])=>String(u).includes('/torn/items'))).toBe(true);
+  });
+  it('does not misidentify a future or completed ranked war as active',async()=>{
+    const factions=[{id:10,name:'Our faction',score:450,chain:4},{id:20,name:'Actual opponent',score:200,chain:0}];
+    const data=await new TornApi('TESTONLYKEY12345',network({'faction/10/wars':{wars:{ranked:null}},'faction/10/rankedwars':{rankedwars:[{id:7,start:now/1000-1000,end:now/1000-10,winner:10,target:100,factions},{id:8,start:now/1000+1000,end:0,winner:0,target:100,factions}]}}),()=>now).snapshot('off',{});
+    expect(data.war?.active??false).toBe(false);expect(data.targets).toEqual([]);
+  });
+  it('recovers a failed current-war read through ranked-war history while continuing all other endpoints',async()=>{
+    const factions=[{id:10,name:'Our faction',score:450,chain:4},{id:20,name:'Actual opponent',score:200,chain:0}];
+    const base=network({'faction/10/rankedwars':{rankedwars:[{id:8,start:now/1000-1000,end:0,winner:0,target:100,factions}]}}),request=vi.fn<typeof fetch>(async(u,o)=>String(u).includes('/v2/faction/10/wars')?new Response('',{status:503}):base(u,o));
+    const data=await new TornApi('TESTONLYKEY12345',request,()=>now).snapshot('yata',{});expect(data.war?.active).toBe(true);expect(data.targets).toHaveLength(2);expect(data.issues?.war).toBeUndefined();expect(data.stocks[0]?.stock).toBe(15);
+  });
+  it('reports an unreadable war instead of silently declaring that no war exists',async()=>{
+    const data=await new TornApi('TESTONLYKEY12345',network({'faction/10/wars':{bad:'format'},'faction/10/rankedwars':{rankedwars:[{id:8,start:now/1000-1000,end:0,winner:0,target:100,factions:[{id:10,name:'Our',score:1}]}]}}),()=>now).snapshot('yata',{});
+    expect(data.war).toBeNull();expect(data.issues?.war).toContain('Both Torn war selections failed');expect(data.stocks[0]?.stock).toBe(15);
+  });
+  it('does not let historical travel values override the current home profile',async()=>{
+    for(const time_left of [0,500]){
+      const api=new TornApi('TESTONLYKEY12345',network({'user/profile':{profile:{id:55,name:'Fixture',level:40,status:{state:'Okay',description:'Okay'}}},'user/travel':{travel:{destination:'Japan',departed_at:now/1000-1000,arrival_at:now/1000-1,time_left}}}),()=>now);
+      const data=await api.snapshot('off',{});expect(api.travelEvidence).toMatchObject({state:'AT_HOME',destinationCountry:'Torn'});expect(data.war?.active).toBe(true);
+    }
   });
   it('preserves an unknown return origin rather than substituting every country',async()=>{
     const data=await new TornApi('TESTONLYKEY12345',network(),()=>now).snapshot('off',{});
@@ -87,6 +150,11 @@ describe('direct Torn API adapter',()=>{
   it('blocks worker reads without API access and requests only the declared Torn origin',async()=>{
     const contains=vi.fn().mockResolvedValue(false),request=vi.fn().mockResolvedValue(false);vi.stubGlobal('chrome',{permissions:{contains,request}});
     try{await expect(requireTornAccess()).rejects.toThrow('Chrome has blocked');await expect(requestTornAccess()).rejects.toThrow('Chrome has blocked');expect(request).toHaveBeenCalledWith({origins:['https://api.torn.com/*']});contains.mockResolvedValue(true);await expect(requireTornAccess()).resolves.toBeUndefined();}finally{vi.unstubAllGlobals();}
+  });
+  it('accepts the real anonymous YATA export for all eleven countries without a Torn catalog',()=>{
+    const raw=JSON.parse(readFileSync(new URL('../fixtures/yata-export-2026-10-07.json',import.meta.url),'utf8'));
+    const at=Math.max(...Object.values(raw.stocks as Record<string,{update:number}>).map(s=>s.update))*1000;
+    const rows=joinStocks([],raw,at,{});expect(rows).toHaveLength(227);expect(new Set(rows.map(s=>s.country)).size).toBe(11);expect(rows.every(s=>s.stock!==null&&s.cost&&s.tornValue===null)).toBe(true);
   });
   it('keeps old stock observations labelled by age while rejecting future and wrong-country data',()=>{
     expect(joinStocks([item()],{stocks:{uae:{update:now/1000-181,stocks:[{id:1,quantity:15}]}}},now,{})[0]?.stock).toBe(15);

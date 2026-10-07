@@ -6,7 +6,7 @@ import { defaultState, type PublicState } from '@tcd/shared';
 const TEST_KEY='TESTONLYKEY12345';
 const fixture=async()=> (await readFile('packages/extension/demo/index.html','utf8')).replace('<script type="module" src="demo.js"></script>','').replace('<span class="plane">✈</span>','<span class="plane">✈</span><p>Dubai to Torn. Remaining Flight Time - 01:10:43</p>');
 const launch=(profile:string)=>chromium.launchPersistentContext(profile,{channel:'chromium',headless:true,viewport:{width:1680,height:1080},args:[`--disable-extensions-except=${resolve('..')}`,`--load-extension=${resolve('..')}`]});
-async function mockTorn(context:BrowserContext,state:{travel:boolean;director?:boolean;chainTimeout?:number}){
+async function mockTorn(context:BrowserContext,state:{travel:boolean;director?:boolean;chainTimeout?:number;warFallback?:boolean;failedPrices?:boolean}){
   const calls:string[]=[];
   await context.route('https://www.torn.com/**',async route=>route.fulfill({body:state.travel?(await fixture()).replace('Dubai to Torn','Torn to Dubai'):(await fixture()).replace(/<p>Dubai to Torn\. Remaining Flight Time[^<]*<\/p>/,''),contentType:'text/html'}));
   const worker=context.serviceWorkers()[0]||await context.waitForEvent('serviceworker');
@@ -18,21 +18,24 @@ async function mockTorn(context:BrowserContext,state:{travel:boolean;director?:b
     if(url.protocol==='chrome-extension:')return nativeFetch(input,options);
     if(url.hostname==='yata.yt'){
       if(new Headers(options?.headers).has('authorization'))throw new Error('Key leaked to stock provider');
-      return new Response(JSON.stringify({stocks:{uae:{update:now,stocks:[{id:1,quantity:50},{id:2,quantity:0},{id:3,quantity:1000}]},swi:{update:now,stocks:[{id:3,quantity:100}]},jap:{update:now,stocks:[{id:4,quantity:10}]}}}));
+      return new Response(JSON.stringify({stocks:{uae:{update:now,stocks:[{id:1,name:'Camel Plushie',cost:100,quantity:50},{id:2,name:'Tribulus Omanense',cost:500,quantity:0},{id:3,quantity:1000}]},swi:{update:now,stocks:[{id:3,name:'Xanax',cost:840000,quantity:100}]},jap:{update:now,stocks:[{id:4,name:'Monkey Plushie',cost:10000,quantity:10}]}}}));
     }
     if(url.hostname==='api.torn.com'&&url.pathname==='/v2/key/info'&&!new Headers(options?.headers).has('authorization')){testGlobal.fixtureCalls.push('anonymous-key/info');return new Response(JSON.stringify({error:{code:2}}));}
     if(url.hostname!=='api.torn.com'||new Headers(options?.headers).get('authorization')!=='ApiKey TESTONLYKEY12345')throw new Error('Unexpected API request');
     const path=url.pathname.replace('/v2/','');testGlobal.fixtureCalls.push(path);
     const payloads:Record<string,unknown>={
-      'key/info':{info:{user:{id:55,faction_id:10,company_id:state.director?88:null},access:{level:1,type:'Minimal'},selections:{}}},
+      'key/info':{info:{user:{id:55,faction_id:10,company_id:state.director?88:null},access:{level:3,type:'Limited'},selections:{}}},
       'user/profile':{profile:{id:55,name:'Fixture player',level:40,status:{state:state.travel?'Traveling':'Okay',description:state.travel?'Traveling to UAE':'Okay'}}},
       'user/travel':{travel:{destination:state.travel?'UAE':'Torn',departed_at:now-100,arrival_at:state.travel?now+500:now-1,time_left:state.travel?500:0,method:'Airstrip'}},
       'faction/chain':{chain:{id:42,current:49,max:49,timeout:state.chainTimeout??120,start:now-500,end:0}},
-      'faction/wars':{wars:{ranked:{war_id:8,start:now-10000,end:null,winner:null,target:1000,factions:[{id:10,name:'Our faction',score:450},{id:20,name:'Actual opponent',score:200}]}}},
+      'faction/10/wars':{wars:{ranked:{war_id:8,start:now-10000,end:null,winner:null,target:1000,factions:[{id:10,name:'Our faction',score:450},{id:20,name:'Actual opponent',score:200}]}}},
       'faction/20/members':{members:[{id:123,name:'Opponent A',level:20,status:{state:'Okay',description:'Okay',until:null},last_action:{status:'Offline'}},{id:124,name:'Opponent hospital',level:30,status:{state:'Hospital',description:'Hospital',until:now+120},last_action:{status:'Online'}}]},
       'torn/items':{items:[{id:1,name:'Camel Plushie',value:{market_price:3000,shops:[{country:'UAE',buy_price:100}]}},{id:2,name:'Tribulus Omanense',value:{market_price:2000,shops:[{country:'UAE',buy_price:500}]}},{id:3,name:'Xanax',value:{market_price:900000,shops:[{country:'Switzerland',buy_price:840000}]}},{id:4,name:'Monkey Plushie',value:{market_price:40000,shops:[{country:'Japan',buy_price:10000}]}}]},
       'company/profile':{profile:{name:'Director company',director:{id:55}}},'company/employees':{employees:[{id:99,name:'Employee A',effectiveness:{addiction:-8}}]}
     };
+    if(state.failedPrices&&path==='torn/items')return new Response('',{status:503});
+    if(state.warFallback&&path==='faction/10/wars')return new Response(JSON.stringify({wars:{ranked:null}}));
+    if(path==='faction/10/rankedwars')return new Response(JSON.stringify({rankedwars:[{id:8,start:now-10000,end:0,winner:null,target:1000,factions:[{id:10,name:'Our faction',score:450,chain:49},{id:20,name:'Actual opponent',score:200,chain:0}]}],_metadata:{links:{next:null}}}));
     return new Response(JSON.stringify(payloads[path]||{error:{code:16}}));
     };
   },state);
@@ -186,5 +189,24 @@ test('company addiction is director-only, while CUSTOM retains arbitrary widget 
     await options.getByLabel('Total capacity · one-time fallback',{exact:true}).fill('29');await options.getByRole('button',{name:'Save settings',exact:true}).click();await expect(options.locator('#status')).toContainText('Settings saved');await expect(host.locator('.dashboard')).toHaveAttribute('data-density','comfortable');await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
     const saved=await options.evaluate(async()=>chrome.runtime.sendMessage({type:'READ_STATE'}));expect(saved.data.settings.panelWidth).toBe(340);expect(saved.data.settings.travelCapacityOverride).toBe(29);await page.reload();await expect(host.locator('.dashboard')).toHaveAttribute('data-theme','slate');
     await host.getByLabel('Dashboard preset').selectOption('WAR');await expect(host.locator('.widget-card')).toHaveCount(2);await expect(host.locator('[data-widget-id="company-addiction"]')).toHaveCount(0);
+  }finally{await context.close();await rm(profile,{recursive:true,force:true});}
+});
+
+
+test('ranked-war history restores automatic WAR while YATA stocks survive a failed Torn catalog',async()=>{
+  const profile=await mkdtemp(join(tmpdir(),'torndashboard-data-recovery-')),context=await launch(profile);
+  try{
+    const worker=await mockTorn(context,{travel:false,warFallback:true,failedPrices:true}),id=new URL(worker.url()).hostname;
+    const state=defaultState();state.settings.stockProvider='yata';state.favorites=[{itemId:1,name:'Camel Plushie',country:'UAE',minimumStock:1,alert:false}];
+    await worker.evaluate(async state=>chrome.storage.local.set({state,personalApiV4:true}),state);
+    const options=await context.newPage();await options.goto(`chrome-extension://${id}/options.html`);await options.getByLabel('Torn API key').fill(TEST_KEY);await options.getByRole('button',{name:'Connect Torn API',exact:true}).click();
+    const data=options.locator('#data-status');await expect(data).toContainText('Active · Actual opponent');await expect(data).toContainText('2 opponents');await expect(data).toContainText('4 observed country products');await expect(data).toContainText('prices: Torn API returned HTTP 503');
+    await expect(options.locator('#product-list option[value="UAE:1"]')).toHaveCount(1);
+    const page=await context.newPage();await page.goto('https://www.torn.com/index.php');const host=page.locator('#tcd-dashboard');await expect(host.getByLabel('Dashboard preset')).toHaveValue('WAR');await expect(host.locator('[data-widget-id="recommended-targets"]')).toContainText('Opponent A');
+    await page.reload();await expect(host.getByLabel('Dashboard preset')).toHaveValue('WAR');await expect(host.locator('[data-widget-id="recommended-targets"]')).toContainText('Actual opponent');
+    await host.getByLabel('Dashboard preset').selectOption('CUSTOM');await expect(host.locator('[data-widget-id="travel-favorites"]')).toContainText('Camel Plushie');await expect(host.locator('[data-widget-id="travel-favorites"]')).toContainText('50');
+    await page.screenshot({path:resolve('docs/data-recovery-preview.png'),fullPage:true});
+    const calls=await worker.evaluate(()=>(globalThis as unknown as {fixtureCalls:string[]}).fixtureCalls);expect(calls.filter(path=>path==='faction/10/rankedwars')).toHaveLength(1);expect(calls.filter(path=>path==='torn/items')).toHaveLength(1);expect(calls.some(path=>path.includes('bosbot'))).toBe(false);
+    expect(await page.content()).not.toContain(TEST_KEY);expect(await data.textContent()).not.toContain(TEST_KEY);
   }finally{await context.close();await rm(profile,{recursive:true,force:true});}
 });

@@ -11,3 +11,7 @@ Travel retains its phases, country context, inventory snapshots, receipt ledger,
 NORMAL has chain, merged watches and director company data. WAR remains chain plus recommendations. TRAVEL has optional purchase summary and destination watches. CUSTOM can arrange currently available widgets. Preset migration preserves watches, credentials and appearance while removing retired widgets and mapping legacy Restock to Watched Products.
 
 [Release changes and acceptance checklist](COMPACT-TRAVEL.md). [Persistent trip engine design](TRAVEL-REFACTOR.md).
+
+## 0.5.2 data recovery
+
+Worker reads have endpoint-local backoff, while invalid credentials and genuine rate limits remain account-wide. Explicit profile faction context drives current wars with a bounded ranked-war history cross-check. YATA's anonymous country/product/cost catalog can survive Torn pricing failure. Incompatible endpoint caches are evicted before revalidation. Historical travel values cannot override a current home profile; missed return legs finalize conservatively with bounded log waiting. Safely confirmed home no longer blocks automatic WAR. Same-war rosters retain original timestamps on member failures. Options exposes safe normalized provider status without secrets. [Evidence and acceptance](DATA-RECOVERY.md).

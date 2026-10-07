@@ -111,9 +111,9 @@ export class Dashboard {
     try {
       const snapshot = await this.store.snapshot(); if (this.destroyed || generation !== this.refreshGeneration) return;
       this.snapshot = snapshot; this.panels.error.hidden = true; this.render();
-      const relevant = this.mode === 'WAR' ? ['war','chain','targets','profile'] : this.mode === 'TRAVEL' ? ['travel','stocks','prices','profile'] : this.mode === 'CUSTOM' ? Object.keys(snapshot.issues || {}) : ['chain','company','profile',...(this.state.favorites.length ? ['stocks','prices'] : [])];
+      const relevant = this.mode === 'WAR' ? ['war','warFallback','chain','targets','profile','connection'] : this.mode === 'TRAVEL' ? ['travel','stocks','prices','profile','connection'] : this.mode === 'CUSTOM' ? Object.keys(snapshot.issues || {}) : ['war','warFallback','travel','chain','company','profile','connection',...(this.state.favorites.length ? ['stocks','prices'] : [])];
       const issues = Object.entries(snapshot.issues || {}).filter(([section]) => relevant.includes(section) && (section !== 'stocks' || this.state.settings.stockProvider !== 'off')).map(([section, message]) => `${section}: ${message}`);
-      if (issues.length) this.error(issues.join(' · '));
+      if (issues.length) this.events.emit('error', 'Some data is unavailable. Options → Data status');
     } catch (error) { if (generation === this.refreshGeneration) { this.render(); this.error(error); } }
     finally { if (generation === this.refreshGeneration) this.pending = false; }
   }

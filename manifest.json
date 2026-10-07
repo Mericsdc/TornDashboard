@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TornDashboard",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Personal Torn API dashboard with travel shopping, bag profit and war widgets.",
   "minimum_chrome_version": "120",
   "permissions": [

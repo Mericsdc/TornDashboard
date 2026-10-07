@@ -77,7 +77,7 @@ export const SnapshotSchema = z.object({ source: z.enum(['mock', 'live']), gener
   travel: z.object({ active: z.boolean(), destination: z.string(), origin: z.string(), arrivesAt: z.number().nullable(), departedAt: z.number().nullable().optional(), capacity: z.number().int().min(1).max(100).nullable().optional(), state: z.string().max(30).optional(), description: z.string().max(150).optional(), observedAt: z.number().optional() }).nullable(),
   travelApp: TravelAppSchema.optional(),
   company: z.object({ isDirector: z.boolean(), name: z.string().max(100), observedAt: z.number().nullable(), employees: z.array(z.object({ id: z.number().int().positive(), name: z.string().max(80), addictionEffect: z.number().nullable() }).strict()).max(100) }).strict().nullable().optional(),
-  player: z.object({ level: z.number().positive().nullable() }), targets: z.array(TargetSchema).max(200), stocks: z.array(StockSchema).max(2000)
+  player: z.object({ level: z.number().positive().nullable(), factionId: z.number().int().positive().nullable().optional() }), targets: z.array(TargetSchema).max(200), stocks: z.array(StockSchema).max(2000)
 }).strict();
 export type Snapshot = z.infer<typeof SnapshotSchema>;
 export type Scenario = 'normal' | 'travel' | 'war';

@@ -89,10 +89,13 @@ export function observeTravel(app: TravelApp, observation: TravelObservation, no
     archiveTrip(app, o.departedAt);
   }
   if (o.state === 'AT_HOME' && app.travelSession) {
-    if (prior.destinationCountry !== 'Torn' || !app.travelSession.inbound.departedAt) return;
-    if (prior.arrivalAt && prior.arrivalAt > now) return;
+    const confirmedHome = o.source === 'api' && dest === 'Torn' && o.at - prior.phaseObservedAt >= 45000;
+    if (!confirmedHome && (prior.destinationCountry !== 'Torn' || !app.travelSession.inbound.departedAt || prior.arrivalAt && prior.arrivalAt > now)) return;
+    // The extension may have been closed throughout the return leg. Keep its ledger, confirm home, then archive.
+    const arrivedAt = prior.destinationCountry === 'Torn' && prior.arrivalAt && prior.arrivalAt <= now ? prior.arrivalAt : o.at;
+    prior.destinationCountry = 'Torn'; prior.originCountry = app.travelSession.country; prior.arrivalAt = arrivedAt;
     prior.state = 'LANDED'; prior.homeConfirmedAt ??= o.at; prior.observedAt = o.at;
-    app.travelSession.inbound.arrivedAt ??= prior.destinationCountry === 'Torn' ? prior.arrivalAt ?? o.at : o.at;
+    app.travelSession.inbound.arrivedAt ??= arrivedAt;
     return;
   }
   const country = o.state === 'RETURNING' ? origin || app.travelSession?.country || prior.marketContextCountry : dest && dest !== 'Torn' ? dest : prior.marketContextCountry;
@@ -177,7 +180,7 @@ export function finalizeDerived(app: TravelApp, now: number, capacityOverride: n
   }
   app.bag.free = app.bag.total !== null && app.bag.used !== null ? Math.max(0, app.bag.total - app.bag.used) : null;
   const trip = app.travelSession;
-  if (trip && t.homeConfirmedAt && now - t.homeConfirmedAt >= 15000 && (!app.logAccess || (trip.logsComplete && trip.logsCheckedAt !== null && trip.logsCheckedAt >= t.homeConfirmedAt))) {
+  if (trip && t.homeConfirmedAt && now - t.homeConfirmedAt >= 15000 && (!app.logAccess || (trip.logsComplete && trip.logsCheckedAt !== null && trip.logsCheckedAt >= t.homeConfirmedAt) || now - t.homeConfirmedAt >= 5*60000)) {
     archiveTrip(app, now);
     app.travelSession = null; app.tripProfit = null; app.previewCountry = null;
     app.travel = { ...t, state: 'AT_HOME', originCountry: 'Torn', destinationCountry: 'Torn', marketContextCountry: null, pendingReturn: false };
@@ -205,6 +208,8 @@ export function mergeSnapshot(previous: Snapshot | undefined, fresh: Snapshot, a
       restock: stock.restock.kind === 'unknown' && old?.restock.kind !== 'unknown' ? old?.restock ?? stock.restock : stock.restock });
   }
   const snapshot = { ...fresh, travelApp: app, stocks: [...byId.values()], war: fresh.issues?.war ? previous?.war ?? fresh.war : fresh.war, chain: mergeChain(previous?.chain, fresh.issues?.chain ? previous?.chain ?? fresh.chain : fresh.chain, now) };
+  // Keep the previous roster through a failed read, but never transfer it to another war/opponent.
+  if ((fresh.issues?.war || fresh.issues?.targets) && snapshot.war?.active && previous?.war && previous.war.id === snapshot.war.id && previous.war.opponentId === snapshot.war.opponentId) snapshot.targets = previous.targets;
   mergePrices(app, snapshot.stocks);
   const t = app.travel;
   snapshot.travel = { active: t.state !== 'AT_HOME', origin: t.originCountry || 'Torn', destination: t.destinationCountry || 'Unknown destination',

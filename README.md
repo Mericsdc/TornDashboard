@@ -12,6 +12,8 @@ Options → **Personal Torn API** bölümüne kendi anahtarını gir → **Conne
 
 “Remember on this browser” açıkken anahtar güvenilir extension storage’da kalır; kapalıyken Chrome kapanınca silinir. Storage şifreli bir kasa değildir. **Remove API key** ile kaldırabilirsin. Eski BOSBOT bağlantısı yerel olarak silinir; favoriler ve görünüm tercihleri korunur. Eski presetlerdeki ek widgetlar CUSTOM düzenine aktarılır. İstenirse eski bot tarayıcı yetkisi botun kendi panelinden ayrıca iptal edilebilir.
 
+**0.5.2 — veri yükleme düzeltmesi:** Güncel profil faction'ı esas alınır. Aktif savaş, mevcut savaş yanıtı eksikse doğrudan Torn ranked-war geçmişinden seçilir; BOSBOT'un aktif/geçmiş/gelecek savaş ayırma mantığı kullanılır. Bot hesabı veya sunucu anahtarı kullanılmaz. Tek endpoint'in HTTP/bağlantı hatası diğer veri okumalarını durdurmaz; gerçek hız limiti ve geçersiz anahtar hesap genelinde korunur. Torn fiyat kataloğu gelmese de YATA'nın ürün adları, ülke, maliyet ve stokları yüklenir; fiyat bilinmiyorsa kâr uydurulmaz. Eski uçuş yanıtı güncel `Okay` profilini seyahatte tutmaz. Kaçırılan dönüş uçuşu sonrası güvenli eve dönüş doğrulanır, kayıt korunarak arşivlenir; tamamlanamayan alışveriş kanıtı açıkça işaretlenir. **Options → Data status** faction, savaş, hedefler, seyahat, fiyat ve stok durumunu ve güvenli hata nedenlerini gösterir. [Değişiklikler ve canlı kontrol listesi](development/docs/DATA-RECOVERY.md).
+
 ## Kullanım
 
 - **WAR:** yalnızca Chain ve Recommended Targets. Aktif ranked war’ın rakip faction’ı Torn API’den otomatik yüklenir. Hospital/seyahat durumları hedef sıralamasında dikkate alınır. Battle stats ve fair fight verisi yoksa `unknown` kalır.
@@ -23,7 +25,7 @@ Options → **Personal Torn API** bölümüne kendi anahtarını gir → **Conne
 
 Görünüm, genişlik, düzen ve otomatik mod ayarları yalnızca Torn içindeki **⚙ → Save settings** ile uygulanır. Options’da API, stok kaynağı, tek seferlik kapasite yedeği ve uyarılar için ayrı kayıt düğmesi vardır; görünüm bölümü kaldırılmıştır. Options’da kayıt almak Torn içindeki görünüm tercihlerini değiştirmez. Takip edilecek ürünler Options’da ülke ve tür gruplarından seçilir. Stok eşiği/uyarı her ürün için düzenlenir. Eski Market, Travel Status ve Restock widget seçimleri yeni düzene güvenle taşınır; favoriler ve diğer görünüm tercihleri korunur.
 
-**0.5.1 — kompakt Travel:** AT_HOME, OUTBOUND, ABROAD, RETURNING ve LANDED aşamaları kalıcı tur kaydıyla yönetilir. Dönüşte hedef Torn olurken market/restock ülkesi yabancı ülke olarak kalır. Yenileme, sayfa geçişi, Chrome yeniden başlatma veya geçici API hatası turu silmez.
+**Seyahat oturumu:** AT_HOME, OUTBOUND, ABROAD, RETURNING ve LANDED aşamaları kalıcı tur kaydıyla yönetilir. Dönüşte hedef Torn olurken market/restock ülkesi yabancı ülke olarak kalır. Yenileme, sayfa geçişi, Chrome yeniden başlatma veya geçici API hatası turu silmez.
 
 Eski manuel hesaplayıcı kaldırıldı. **Trip Profit**, doğrulanmış alışverişleri tek tek kaydeder; maliyet, Torn piyasa değeri, tahmini kâr, ROI ve bilinen tur süresinden saatlik kâr otomatik hesaplanır. Çantanın toplamı önce Torn sayfasından, sonra önceki bilinen değerden / seyahat yönteminden / uygun perklerden belirlenir. Algılama başarısızsa Options’da toplam kapasiteyi bir kez girebilirsin. Envanter farkı hediyeleri veya transferleri otomatik alışveriş saymaz; Torn inventory verisi bir saat önbelleklidir.
 
@@ -53,6 +55,6 @@ npm run preview
 
 `http://127.0.0.1:4319/?sid=travel` etiketli MOCK görsel demodur. Gerçek veriler yüklenen Chrome eklentisinde kullanılır. Kaynak/testler `development` altındadır. İsteğe bağlı Fastify/PostgreSQL/Redis geliştirme servisi canlı eklentinin veri yolunda değildir.
 
-GitHub’dan yeni kodu almak: `git pull --ff-only`, `npm run setup`, `npm run update`; sonra Chrome Reload. Sonraki sürüm örneği: `npm run version:set -- 0.5.2`, kontroller, commit/push ve eşleşen `v0.5.2` etiketi. GitHub Actions doğrulayıp **TornDashboard.zip** release dosyasını oluşturur. Unpacked eklenti GitHub’dan otomatik güncellenmez; mağaza üzerinden otomatik dağıtım için aynı Chrome Web Store kaydı kullanılmalıdır.
+GitHub’dan yeni kodu almak: `git pull --ff-only`, `npm run setup`, `npm run update`; sonra Chrome Reload. Sonraki sürüm örneği: `npm run version:set -- 0.5.3`, kontroller, commit/push ve eşleşen `v0.5.3` etiketi. GitHub Actions doğrulayıp **TornDashboard.zip** release dosyasını oluşturur. Unpacked eklenti GitHub’dan otomatik güncellenmez; mağaza üzerinden otomatik dağıtım için aynı Chrome Web Store kaydı kullanılmalıdır.
 
 [Kaynak mimarisi](development/docs/ARCHITECTURE.md) · [Güvenlik](development/docs/SECURITY.md) · [Doğrulama](development/docs/VERIFICATION.md) · [Torn API resmi sözleşmesi](https://www.torn.com/swagger.php) · [YATA ortak stok servisi](https://yata.yt/api/v1/travel/export/)

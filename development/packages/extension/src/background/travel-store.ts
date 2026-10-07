@@ -1,6 +1,6 @@
 import { SnapshotSchema, TravelAppSchema, PurchaseSchema, emptyTravelApp, observeTravel, applyPageTravel, mergePrices, recordInventory, recordPurchase, finalizeDerived, mergeSnapshot, type Snapshot, type PublicState, type Purchase, type PageTravel, type StockObservation, estimateRestock, canonicalCountry, currentChain, pageChain, type ChainObservation } from '@tcd/shared';
 import { TornApi } from '../services/torn-api';
-import { requireTornAccess } from '../services/torn-connection';
+import { requireTornAccess, TornError } from '../services/torn-connection';
 type Auth = { key: string; userId: number };
 type Bundle = { ownerId: number; snapshot: Snapshot; endpointCache: ReturnType<TornApi['exportCache']>; stockHistory: Record<string, StockObservation[]>; pendingReceipts: Purchase[] };
 /** One owner-scoped data layer. UI reads cache; API work never occupies the message mutation queue. */
@@ -118,10 +118,11 @@ export class TravelDataStore {
         latest.stockHistory = Object.fromEntries([...new Set([...Object.keys(history),...Object.keys(latest.stockHistory)])].map(key=>[key,[...new Map([...(history[key]||[]),...(latest.stockHistory[key]||[])].map(v=>[v.observedAt,v])).values()].sort((a,b)=>a.observedAt-b.observedAt).filter(v=>now-v.observedAt<7*86400000).slice(-128)])); latest.endpointCache = api.exportCache();
         this.current(state); await this.persist(); await this.alerts(latest.snapshot, state, auth.userId); await this.changed();
       });
-    } catch {
+    } catch (error) {
       await this.commit(async () => {
         const active = await this.credential(); if (!active || active.key !== auth.key || this.api() !== api) return;
         const latest = await this.load(active), app = latest.snapshot.travelApp!;
+        latest.snapshot.issues = {...latest.snapshot.issues, connection: error instanceof TornError ? error.message.slice(0,200) : 'Data refresh did not complete. Retry from Options.'};
         app.quality = app.refreshedAt ? 'error-with-cache' : 'error-without-cache';
         app.notice = app.refreshedAt ? 'Showing saved travel data. Reconnecting…' : 'Waiting for travel data…';
         this.current(state); await this.persist(); await this.changed();

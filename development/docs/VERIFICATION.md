@@ -1,4 +1,18 @@
-# Verification — TornDashboard 0.5.1
+# Verification — TornDashboard 0.5.2
+
+2026-10-07. Local Node 24 checks pass: ESLint, strict TypeScript and **115 unit/API/backend/distribution tests**. **Ten real unpacked MV3 Chromium flows pass**, including the new provider-recovery flow. Production build retains the same extension folder and deterministic 12 runtime assets.
+
+New coverage: BOS/EPIC fixture active war versus completed/upcoming entries; current profile faction overriding old key-info faction; ranked-history fallback on null/error current-war response; history cross-check permission failure; per-endpoint HTTP failure isolation; YATA products during Torn pricing outage; invalid cache eviction; current home profile overriding historical travel; missed return confirmation and bounded/incomplete finalization; safe automatic WAR while logs finalize; same-war roster retention; actual anonymous YATA export for all eleven countries (227 products).
+
+Official Torn OpenAPI 6.13.6 and anonymous live YATA export were fetched again on 2026-10-07. These validate contracts/public stock access, **not the user's personal key or current battle**. No live personal Torn credential or logged-in gameplay session was used. Chromium network providers are controlled contract fixtures; Chrome permissions, messaging, rendering, reload, persistence and alert APIs are real.
+
+The new browser flow uses a Limited key fixture, no current-war entry, an active ranked-war history entry and HTTP 503 pricing. It confirms automatic WAR and opponent loading across reload, products/stocks still available through YATA, safe Options Data status, shared request caching, and no bot/secret access.
+
+[Release details and account acceptance checklist](DATA-RECOVERY.md).
+
+---
+
+# Previous verification — TornDashboard 0.5.1
 
 2026-10-06. Local Node 24 checks pass: ESLint, strict TypeScript, **99 unit/API/backend/distribution tests** and **nine real unpacked MV3 Chromium flows**. The production build and deterministic 12-asset ZIP package pass. `npm audit` reports zero vulnerabilities after updating the development-only shell-quote dependency.
 

@@ -54,7 +54,7 @@ function renderFavorites(): void {
   }
 }
 async function products(): Promise<void> {
-  const data = await send<Snapshot>({type:'GET_SNAPSHOT'}); stocks=data.stocks;renderHistory(data);
+  const data = await send<Snapshot>({type:'GET_SNAPSHOT'}); stocks=data.stocks;renderHistory(data);renderDataStatus(data);
   const list=document.querySelector<HTMLSelectElement>('#product-list')!; list.replaceChildren();
   for (const country of [...new Set(stocks.map(s=>s.country))].sort()) for (const kind of ['flowers','plushies','other'] as const) {
     const rows=stocks.filter(s=>s.country===country&&category(s)===kind).sort((a,b)=>a.name.localeCompare(b.name));if(!rows.length)continue;
@@ -77,7 +77,7 @@ form.addEventListener('submit',event=>{ event.preventDefault(); handle((async()=
   state=await send<PublicState>({type:'SAVE_SETTINGS',patch});render();report('Settings saved. Torn tabs update automatically.');handle(products());
 })());});
 document.querySelector<HTMLFormElement>('#key-form')!.addEventListener('submit',event=>{event.preventDefault();const target=event.currentTarget as HTMLFormElement,key=field('tornKey',target).value.trim(),remember=(field('rememberKey',target) as HTMLInputElement).checked;connectionAction('Connecting to Torn API…',async()=>{await send({type:'SAVE_KEY',key,remember});field('tornKey',target).value='';await keyStatus();await products();report('Connected. Personal data comes directly from Torn. Enable YATA and Save settings for stocks.');});});
-document.querySelector('#disconnect-key')!.addEventListener('click',()=>handle((async()=>{await send({type:'DISCONNECT_KEY'});stocks=[];await keyStatus();document.querySelector('#product-list')!.replaceChildren();renderFavorites();report('API key removed');})()));
+document.querySelector('#disconnect-key')!.addEventListener('click',()=>handle((async()=>{await send({type:'DISCONNECT_KEY'});stocks=[];await keyStatus();document.querySelector('#product-list')!.replaceChildren();document.querySelector('#data-status')!.textContent='No personal API key connected';renderFavorites();report('API key removed');})()));
 document.querySelector('#refresh-data')!.addEventListener('click',()=>connectionAction('Refreshing Torn data…',async()=>{await send({type:'REFRESH_DATA'});await keyStatus();await products();report('Showing saved data while refresh completes. Torn and YATA cache intervals still apply.');}));
 document.querySelector('#test-connection')!.addEventListener('click',()=>connectionAction('Checking Chrome access and Torn API…',async()=>{await send({type:'TEST_CONNECTION'});await keyStatus();report('Chrome access and Torn API connection are working. No API key was sent by this test.');}));
 document.querySelector('#test-sound')!.addEventListener('click',()=>handle((async()=>{await send({type:'TEST_SOUND'});report('Warning sound played');})()));
@@ -91,9 +91,23 @@ function renderHistory(data: Snapshot): void {
   if(!app.history.length)host.append(el('p','muted','Your completed trips will appear here.'));
   for(const trip of app.history){const row=el('details','watch-country');row.dataset.tripId=trip.tripId;row.open=opened.has(trip.tripId);row.append(el('summary','',`${trip.country} · ${trip.finalizedAt?new Date(trip.finalizedAt).toLocaleDateString():''} · ${trip.purchases.length} receipts`),el('p','muted',trip.finalization==='incomplete-evidence'?'Incomplete purchase evidence':'Confirmed purchase ledger'),...profitNodes(trip,app,Date.now()));host.append(row);}
 }
+function renderDataStatus(data: Snapshot): void {
+  const host=document.querySelector<HTMLElement>('#data-status')!,now=Date.now(),issues=data.issues||{};
+  const seen=(at:number|undefined|null)=>at?`${Math.max(0,Math.floor((now-at)/1000))}s ago`:'Waiting for first refresh';
+  const rows:Record<string,string>={
+    Faction:data.player.factionId===undefined?'Waiting for account data':data.player.factionId===null?'Not in a faction':`#${data.player.factionId}`,
+    War:!data.generatedAt?'Waiting for first refresh':data.war?`${data.war.active?'Active':'Scheduled / ended'} · ${data.war.opponent} · seen ${seen(data.war.observedAt)}`:issues.war||issues.warFallback?'Could not complete war detection':'No active ranked war detected',
+    Targets:`${data.targets.length} opponents · latest status ${seen(Math.max(0,...data.targets.map(t=>t.observedAt)))}`,
+    Travel:`${data.travelApp?.travel.state||'Waiting'} · ${data.travelApp?.travel.marketContextCountry||'Torn'} · seen ${seen(data.travelApp?.travel.observedAt)}`,
+    Prices:`${data.stocks.filter(s=>s.tornValue!==null&&s.tornValue!==undefined).length} priced country products`,
+    Stock:`${data.stockProvider==='yata'?'YATA':'Disabled'} · ${data.stocks.filter(s=>s.stock!==null).length} observed country products`
+  };
+  host.replaceChildren(...Object.entries(rows).map(([name,value])=>stat(name,value)));
+  for(const [section,message]of Object.entries(issues))if(section!=='stocks'||data.stockProvider!=='off')host.append(el('p','error',`${section}: ${message}`));
+}
 let updating=false;
 chrome.runtime.onMessage.addListener((message: unknown)=>{
   if(!state||typeof message!=='object'||message===null||!('type' in message))return;
-  if(message.type==='ACCOUNT_CHANGED'){stocks=[];document.querySelector('#trip-history')!.replaceChildren();document.querySelector('#product-list')!.replaceChildren();handle(keyStatus());return;}
+  if(message.type==='ACCOUNT_CHANGED'){stocks=[];document.querySelector('#trip-history')!.replaceChildren();document.querySelector('#product-list')!.replaceChildren();document.querySelector('#data-status')!.textContent='Waiting for account data';handle(keyStatus());return;}
   if(message.type==='DATA_CHANGED'&&!updating){updating=true;void products().catch(()=>undefined).finally(()=>{updating=false;});}
 });
